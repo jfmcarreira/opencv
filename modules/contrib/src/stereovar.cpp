@@ -409,3 +409,66 @@ void StereoVar::operator ()( const Mat& left, const Mat& right, Mat& disp )
     u.release();
 }
 } // namespace
+
+//! Compatibility with c code
+CV_IMPL CvStereoVARState* cvCreateStereoVARState( int /*preset*/, int numberOfDisparities, int penalization )
+{
+	CvStereoVARState *state = (CvStereoVARState*)cvAlloc( sizeof(*state) );
+	if( !state )
+		return 0;
+
+	state->numberOfDisparities  = numberOfDisparities;
+	state->penalization         = penalization;
+	state->levels = 3;									// ignored with USE_AUTO_PARAMS
+	state->pyrScale = 0.5;								// ignored with USE_AUTO_PARAMS
+	state->nIt = 25;
+	state->minDisp = -( state->numberOfDisparities );	
+	state->maxDisp = 0;
+	state->poly_n = 3;
+	state->poly_sigma = 0.0;
+	state->fi = 15.0f;
+	state->lambda = 0.03f;
+	
+	return state;
+}
+
+CV_IMPL void cvFindStereoCorrespondenceVAR( IplImage *left_img, IplImage* right_img,
+  IplImage** disparity_img , CvStereoVARState *state )
+{
+	cv::StereoVar var;
+
+	var.levels = 3;									// ignored with USE_AUTO_PARAMS
+	var.pyrScale = 0.5;								// ignored with USE_AUTO_PARAMS
+	var.nIt = 25;
+	var.minDisp = state->minDisp;	
+	var.maxDisp = state->maxDisp;
+	var.poly_n = state->poly_n;
+	var.poly_sigma = state->poly_sigma;
+	var.fi = state->fi;
+	var.lambda = 0.03f;
+	var.penalization = state->penalization;	// ignored with USE_AUTO_PARAMS
+	var.cycle = var.CYCLE_V;						// ignored with USE_AUTO_PARAMS
+	var.flags = var.USE_SMART_ID | var.USE_AUTO_PARAMS | var.USE_INITIAL_DISPARITY | var.USE_MEDIAN_FILTERING /*| var.USE_EQUALIZE_HIST */ ;
+
+	cv::Mat left_mat = cv::cvarrToMat(left_img,0);
+	cv::Mat right_mat = cv::cvarrToMat(right_img,0);
+
+	(* disparity_img) = cvCreateImage( cvGetSize(left_img) , IPL_DEPTH_8U , 1 );    
+	cv::Mat disparity_mat = cv::cvarrToMat( (* disparity_img),0);
+
+	var( left_mat , right_mat , disparity_mat );
+
+	return;
+}
+
+CV_IMPL void cvReleaseStereoVARState( CvStereoVARState** state )
+{
+	if( !state )
+		CV_Error( CV_StsNullPtr, "" );
+
+	if( !*state )
+		return;
+
+	cvFree( state );
+}
+//! End
