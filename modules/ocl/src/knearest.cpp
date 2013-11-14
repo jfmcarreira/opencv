@@ -25,7 +25,7 @@
 //
 //   * Redistribution's in binary form must reproduce the above copyright notice,
 //     this list of conditions and the following disclaimer in the documentation
-//     and/or other oclMaterials provided with the distribution.
+//     and/or other materials provided with the distribution.
 //
 //   * The name of the copyright holders may not be used to endorse or promote products
 //     derived from this software without specific prior written permission.
@@ -44,16 +44,10 @@
 //M*/
 
 #include "precomp.hpp"
+#include "opencl_kernels.hpp"
+
 using namespace cv;
 using namespace cv::ocl;
-
-namespace cv
-{
-    namespace ocl
-    {
-        extern const char* knearest;//knearest
-    }
-}
 
 KNearestNeighbour::KNearestNeighbour()
 {
@@ -112,7 +106,7 @@ void KNearestNeighbour::find_nearest(const oclMat& samples, int k, oclMat& lable
     k1 = MIN( k1, k );
 
     String kernel_name = "knn_find_nearest";
-    cl_ulong local_memory_size = queryLocalMemInfo();
+    cl_ulong local_memory_size = (cl_ulong)Context::getContext()->getDeviceInfo().localMemorySize;
     int nThreads = local_memory_size / (2 * k * 4);
     if(nThreads >= 256)
         nThreads = 256;
@@ -122,7 +116,7 @@ void KNearestNeighbour::find_nearest(const oclMat& samples, int k, oclMat& lable
     size_t global_thread[] = {1, samples.rows, 1};
 
     char build_option[50];
-    if(!Context::getContext()->supportsFeature(Context::CL_DOUBLE))
+    if(!Context::getContext()->supportsFeature(FEATURE_CL_DOUBLE))
     {
         sprintf(build_option, " ");
     }else

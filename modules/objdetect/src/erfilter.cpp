@@ -126,8 +126,6 @@ private:
                        int d_C1, int d_C2, int d_C3 );
     // merge an ER with its nested parent
     void er_merge( ERStat *parent, ERStat *child );
-    // recursively walk the tree and clean memory
-    void er_tree_clean( ERStat *er );
     // copy extracted regions into the output vector
     ERStat* er_save( ERStat *er, ERStat *parent, ERStat *prev );
     // recursively walk the tree and filter (remove) regions using the callback classifier
@@ -486,7 +484,17 @@ void ERFilterNM::er_tree_extract( InputArray image )
             er_save(er_stack.back(), NULL, NULL);
 
             // clean memory
-            er_tree_clean(er_stack.back());
+            for (size_t r=0; r<er_stack.size(); r++)
+            {
+                ERStat *stat = er_stack.at(r);
+                if (stat->crossings)
+                {
+                    stat->crossings->clear();
+                    delete(stat->crossings);
+                    stat->crossings = NULL;
+                }
+                delete stat;
+            }
             er_stack.clear();
 
             return;
@@ -678,22 +686,6 @@ void ERFilterNM::er_merge(ERStat *parent, ERStat *child)
 
 }
 
-// recursively walk the tree and clean memory
-void ERFilterNM::er_tree_clean( ERStat *stat )
-{
-        for (ERStat * child = stat->child; child; child = child->next)
-        {
-            er_tree_clean(child);
-        }
-        if (stat->crossings)
-        {
-            stat->crossings->clear();
-            delete(stat->crossings);
-            stat->crossings = NULL;
-        }
-        delete stat;
-}
-
 // copy extracted regions into the output vector
 ERStat* ERFilterNM::er_save( ERStat *er, ERStat *parent, ERStat *prev )
 {
@@ -795,7 +787,7 @@ ERStat* ERFilterNM::er_tree_filter ( InputArray image, ERStat * stat, ERStat *pa
         int p_prev = p-1;
         int p_next = p+1;
         if (p_prev == -1)
-            p_prev = contour_poly.size()-1;
+            p_prev = (int)contour_poly.size()-1;
         if (p_next == (int)contour_poly.size())
             p_next = 0;
 
@@ -2455,9 +2447,9 @@ void MaxMeaningfulClustering::build_merge_info(double *Z, int N, vector<HCluster
 
         cluster.dist   = dist;
         if (cluster.dist >= 1)
-            cluster.dist = 0.999999;
+            cluster.dist = 0.999999f;
         if (cluster.dist == 0)
-            cluster.dist = 1.e-25;
+            cluster.dist = 1.e-25f;
 
         cluster.dist_ext   = 1;
 
@@ -2811,7 +2803,7 @@ void erGrouping(InputArrayOfArrays _src, vector<vector<ERStat> > &regions, const
 
         for (int f=0; f<num_features; f++)
         {
-            unsigned int N = regions.at(c).size();
+            unsigned int N = (unsigned int)regions.at(c).size();
             if (N<3) break;
             int dim = dims[f];
             double *data = (double*)malloc(dim*N * sizeof(double));
@@ -2892,7 +2884,7 @@ void erGrouping(InputArrayOfArrays _src, vector<vector<ERStat> > &regions, const
         }
 
         // Find the Max. Meaningful Clusters in the co-occurrence matrix
-        mm_clustering(D, regions.at(c).size(), METHOD_METR_AVERAGE, &meaningful_clusters);
+        mm_clustering(D, (unsigned int)regions.at(c).size(), METHOD_METR_AVERAGE, &meaningful_clusters);
         free(D);
 
 

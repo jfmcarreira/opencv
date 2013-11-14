@@ -25,7 +25,7 @@
 //
 //   * Redistribution's in binary form must reproduce the above copyright notice,
 //     this list of conditions and the following disclaimer in the documentation
-//     and/or other oclMaterials provided with the distribution.
+//     and/or other materials provided with the distribution.
 //
 //   * The name of the copyright holders may not be used to endorse or promote products
 //     derived from this software without specific prior written permission.
@@ -51,12 +51,30 @@
 #endif
 #endif
 
+#if defined (FUNC_ADD)
+#define EXPRESSION dst[dst_index] = convertToT(convertToWT(src1[src1_index]) + scalar);
+#endif
+
+#if defined (FUNC_SUB)
+#define EXPRESSION dst[dst_index] = convertToT(convertToWT(src1[src1_index]) - scalar);
+#endif
+
+#if defined (FUNC_MUL)
+#define EXPRESSION dst[dst_index] = convertToT(convertToWT(src1[src1_index]) * scalar);
+#endif
+
+#if defined (FUNC_DIV)
+#define EXPRESSION T zero = (T)(0); \
+    dst[dst_index] = src2[src2_index] == zero ? zero : \
+    convertToT(convertToWT(src1[src1_index]) / scalar[0]);
+#endif
+
 ///////////////////////////////////////////////////////////////////////////////////
 //////////////////////////// Add with scalar with mask ////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////
 
 __kernel void arithm_binary_op_scalar_mask(__global T *src1, int src1_step, int src1_offset,
-                                     __global WT *scalar,
+                                     WT scalar,
                                      __global uchar *mask, int mask_step, int mask_offset,
                                      __global T *dst,  int dst_step,  int dst_offset,
                                      int cols, int rows)
@@ -72,7 +90,7 @@ __kernel void arithm_binary_op_scalar_mask(__global T *src1, int src1_step, int 
             int src1_index = mad24(y, src1_step, x + src1_offset);
             int dst_index = mad24(y, dst_step, dst_offset + x);
 
-            dst[dst_index] = convertToT(convertToWT(src1[src1_index]) Operation scalar[0]);
+            EXPRESSION
         }
     }
 }

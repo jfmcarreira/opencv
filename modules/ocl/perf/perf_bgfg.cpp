@@ -26,7 +26,7 @@
 //
 //   * Redistribution's in binary form must reproduce the above copyright notice,
 //     this list of conditions and the following disclaimer in the documentation
-//     and/or other oclMaterials provided with the distribution.
+//     and/or other materials provided with the distribution.
 //
 //   * The name of the copyright holders may not be used to endorse or promote products
 //     derived from this software without specific prior written permission.
@@ -167,7 +167,7 @@ PERF_TEST_P(VideoMOGFixture, MOG,
 typedef tuple<string, int> VideoMOG2ParamType;
 typedef TestBaseWithParam<VideoMOG2ParamType> VideoMOG2Fixture;
 
-PERF_TEST_P(VideoMOG2Fixture, MOG2,
+PERF_TEST_P(VideoMOG2Fixture, DISABLED_MOG2, // TODO Disabled: random hungs on buildslave
             ::testing::Combine(::testing::Values("gpu/video/768x576.avi", "gpu/video/1920x1080.avi"),
             ::testing::Values(1, 3)))
 {

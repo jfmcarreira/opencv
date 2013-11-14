@@ -25,7 +25,7 @@
 //
 //   * Redistribution's in binary form must reproduce the above copyright notice,
 //     this list of conditions and the following disclaimer in the documentation
-//     and/or other oclMaterials provided with the distribution.
+//     and/or other materials provided with the distribution.
 //
 //   * The name of the copyright holders may not be used to endorse or promote products
 //     derived from this software without specific prior written permission.
@@ -43,18 +43,16 @@
 //
 //M*/
 
-#include <iomanip>
 #include "precomp.hpp"
+#include "opencl_kernels.hpp"
+
+using namespace cv;
+using namespace cv::ocl;
 
 namespace cv
 {
 namespace ocl
 {
-
-extern const char * kernel_sort_by_key;
-extern const char * kernel_stablesort_by_key;
-extern const char * kernel_radix_sort_by_key;
-
 void sortByKey(oclMat& keys, oclMat& vals, size_t vecSize, int method, bool isGreaterThan);
 
 //TODO(pengx17): change this value depending on device other than a constant

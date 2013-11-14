@@ -15,8 +15,8 @@
 // Third party copyrights are property of their respective owners.
 //
 // @Authors
-//		Zhang Chunpeng chunpeng@multicorewareinc.com
-//		Yao Wang, yao@multicorewareinc.com
+//        Zhang Chunpeng chunpeng@multicorewareinc.com
+//        Yao Wang, yao@multicorewareinc.com
 //
 //
 // Redistribution and use in source and binary forms, with or without modification,
@@ -27,7 +27,7 @@
 //
 //   * Redistribution's in binary form must reproduce the above copyright notice,
 //     this list of conditions and the following disclaimer in the documentation
-//     and/or other oclMaterials provided with the distribution.
+//     and/or other materials provided with the distribution.
 //
 //   * The name of the copyright holders may not be used to endorse or promote products
 //     derived from this software without specific prior written permission.
@@ -45,20 +45,19 @@
 //
 //M*/
 
-/* Haar features calculation */
-//#define EMU
-
 #include "precomp.hpp"
+#include "opencl_kernels.hpp"
 
 using namespace cv;
 using namespace cv::ocl;
+
+/* Haar features calculation */
+//#define EMU
 
 namespace cv
 {
     namespace ocl
     {
-        extern const char *pyr_up;
-
         void pyrUp(const cv::ocl::oclMat &src, cv::ocl::oclMat &dst)
         {
             int depth = src.depth(), channels = src.channels(), oclChannels = src.oclchannels();

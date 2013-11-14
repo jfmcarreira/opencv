@@ -25,7 +25,7 @@
 //
 //   * Redistribution's in binary form must reproduce the above copyright notice,
 //     this list of conditions and the following disclaimer in the documentation
-//     and/or other oclMaterials provided with the distribution.
+//     and/or other materials provided with the distribution.
 //
 //   * The name of the copyright holders may not be used to endorse or promote products
 //     derived from this software without specific prior written permission.
@@ -44,21 +44,11 @@
 //M*/
 
 
-#include <iomanip>
 #include "precomp.hpp"
+#include "opencl_kernels.hpp"
 
 using namespace cv;
 using namespace cv::ocl;
-
-//helper routines
-namespace cv
-{
-    namespace ocl
-    {
-        ///////////////////////////OpenCL kernel strings///////////////////////////
-        extern const char *match_template;
-    }
-}
 
 namespace cv
 {
@@ -101,7 +91,7 @@ namespace cv
         static bool useNaive(int method, int depth, Size size)
         {
 #ifdef HAVE_CLAMDFFT
-            if (method == TM_SQDIFF && (depth == CV_32F || !Context::getContext()->supportsFeature(Context::CL_DOUBLE)))
+            if (method == TM_SQDIFF && (depth == CV_32F || !Context::getContext()->supportsFeature(FEATURE_CL_DOUBLE)))
             {
                 return true;
             }

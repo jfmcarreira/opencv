@@ -25,7 +25,7 @@
 //
 //   * Redistribution's in binary form must reproduce the above copyright notice,
 //     this list of conditions and the following disclaimer in the documentation
-//     and/or other oclMaterials provided with the distribution.
+//     and/or other materials provided with the distribution.
 //
 //   * The name of the copyright holders may not be used to endorse or promote products
 //     derived from this software without specific prior written permission.
@@ -45,22 +45,13 @@
 
 
 #include "precomp.hpp"
+#include "opencl_kernels.hpp"
 #include "opencv2/video/tracking.hpp"
 
-using namespace std;
 using namespace cv;
 using namespace cv::ocl;
 
 #define MIN_SIZE 32
-
-namespace cv
-{
-namespace ocl
-{
-///////////////////////////OpenCL kernel strings///////////////////////////
-extern const char *optical_flow_farneback;
-}
-}
 
 namespace cv {
 namespace ocl {
@@ -344,8 +335,6 @@ void cv::ocl::FarnebackOpticalFlow::updateFlow_boxFilter(
     optflow_farneback::boxFilter5Ocl(M, blockSize/2, bufM);
 
     swap(M, bufM);
-
-    finish();
 
     optflow_farneback::updateFlowOcl(M, flowx, flowy);
 

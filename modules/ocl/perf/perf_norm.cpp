@@ -26,7 +26,7 @@
 //
 //   * Redistribution's in binary form must reproduce the above copyright notice,
 //     this list of conditions and the following disclaimer in the documentation
-//     and/or other oclMaterials provided with the distribution.
+//     and/or other materials provided with the distribution.
 //
 //   * The name of the copyright holders may not be used to endorse or promote products
 //     derived from this software without specific prior written permission.
@@ -51,18 +51,21 @@ using std::tr1::get;
 
 ///////////// norm////////////////////////
 
-typedef TestBaseWithParam<Size> normFixture;
+typedef tuple<Size, MatType> normParams;
+typedef TestBaseWithParam<normParams> normFixture;
 
-PERF_TEST_P(normFixture, DISABLED_norm, OCL_TYPICAL_MAT_SIZES) // TODO doesn't work properly
+PERF_TEST_P(normFixture, norm, testing::Combine(
+                OCL_TYPICAL_MAT_SIZES,
+                OCL_PERF_ENUM(CV_8UC1, CV_32FC1)))
 {
-    const Size srcSize = GetParam();
-    const std::string impl = getSelectedImpl();
+    const normParams params = GetParam();
+    const Size srcSize = get<0>(params);
+    const int type = get<1>(params);
     double value = 0.0;
+    const double eps = CV_MAT_DEPTH(type) == CV_8U ? DBL_EPSILON : 1e-3;
 
-    Mat src1(srcSize, CV_8UC1), src2(srcSize, CV_8UC1);
-    declare.in(src1, src2);
-    randu(src1, 0, 1);
-    randu(src2, 0, 1);
+    Mat src1(srcSize, type), src2(srcSize, type);
+    declare.in(src1, src2, WARMUP_RNG);
 
     if (RUN_OCL_IMPL)
     {
@@ -70,7 +73,7 @@ PERF_TEST_P(normFixture, DISABLED_norm, OCL_TYPICAL_MAT_SIZES) // TODO doesn't w
 
         OCL_TEST_CYCLE() value = cv::ocl::norm(oclSrc1, oclSrc2, NORM_INF);
 
-        SANITY_CHECK(value);
+        SANITY_CHECK(value, eps);
     }
     else if (RUN_PLAIN_IMPL)
     {
