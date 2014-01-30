@@ -167,7 +167,7 @@ namespace cv
             CACHE_NONE    = 0,        // do not cache OpenCL binary
             CACHE_DEBUG   = 0x1 << 0, // cache OpenCL binary when built in debug mode
             CACHE_RELEASE = 0x1 << 1, // default behavior, only cache when built in release mode
-            CACHE_ALL     = CACHE_DEBUG | CACHE_RELEASE, // cache opencl binary
+            CACHE_ALL     = CACHE_DEBUG | CACHE_RELEASE // cache opencl binary
         };
         //! Enable or disable OpenCL program binary caching onto local disk
         // After a program (*.cl files in opencl/ folder) is built at runtime, we allow the
@@ -1513,6 +1513,26 @@ namespace cv
 
             int calcKeypointsOCL(const oclMat& img, const oclMat& mask, int maxKeypoints);
             int nonmaxSupressionOCL(oclMat& keypoints);
+        };
+
+        ////////////////////////////////// BRIEF Feature Descriptor //////////////////////////////////
+
+        class CV_EXPORTS BRIEF_OCL
+        {
+        public:
+            static const int PATCH_SIZE = 48;
+            static const int KERNEL_SIZE = 9;
+
+            explicit BRIEF_OCL(int _bytes = 32);
+
+            //!computes the brief descriptor for a set of given keypoints
+            //! supports only CV_8UC1 images
+            void compute(const oclMat& image, const oclMat& keypoints, oclMat& mask, oclMat& descriptors) const;
+
+            static int getBorderSize();
+        protected:
+
+            int bytes;
         };
 
         ////////////////////////////////// ORB Descriptor Extractor //////////////////////////////////

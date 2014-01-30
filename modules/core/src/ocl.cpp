@@ -821,6 +821,7 @@ OCL_FUNC_P(cl_mem, clCreateSubBuffer,
     const void * buffer_create_info,
     cl_int * errcode_ret),
     (buffer, flags, buffer_create_type, buffer_create_info, errcode_ret))
+*/
 
 OCL_FUNC_P(cl_mem, clCreateImage,
     (cl_context context,
@@ -831,6 +832,18 @@ OCL_FUNC_P(cl_mem, clCreateImage,
     cl_int * errcode_ret),
     (context, flags, image_format, image_desc, host_ptr, errcode_ret))
 
+OCL_FUNC_P(cl_mem, clCreateImage2D,
+    (cl_context context,
+    cl_mem_flags flags,
+    const cl_image_format * image_format,
+    size_t image_width,
+    size_t image_height,
+    size_t image_row_pitch,
+    void * host_ptr,
+    cl_int *errcode_ret),
+    (context, flags, image_format, image_width, image_height, image_row_pitch, host_ptr, errcode_ret))
+
+/*
 OCL_FUNC(cl_int, clGetSupportedImageFormats,
  (cl_context context,
  cl_mem_flags flags,
@@ -945,21 +958,26 @@ OCL_FUNC(cl_int, clEnqueueCopyImageToBuffer,
  cl_event * event),
  (command_queue, src_image, dst_buffer, src_origin, region, dst_offset,
  num_events_in_wait_list, event_wait_list, event))
+*/
 
 OCL_FUNC(cl_int, clEnqueueCopyBufferToImage,
  (cl_command_queue command_queue,
  cl_mem src_buffer,
  cl_mem dst_image,
  size_t src_offset,
- const size_t * dst_origin[3],
- const size_t * region[3],
+ const size_t dst_origin[3],
+ const size_t region[3],
  cl_uint num_events_in_wait_list,
  const cl_event * event_wait_list,
  cl_event * event),
  (command_queue, src_buffer, dst_image, src_offset, dst_origin,
  region, num_events_in_wait_list, event_wait_list, event))
 
+ OCL_FUNC(cl_int, clFlush,
+ (cl_command_queue command_queue),
+ (command_queue))
 
+/*
 OCL_FUNC_P(void*, clEnqueueMapImage,
  (cl_command_queue command_queue,
  cl_mem image,
@@ -976,7 +994,9 @@ OCL_FUNC_P(void*, clEnqueueMapImage,
  (command_queue, image, blocking_map, map_flags, origin, region,
  image_row_pitch, image_slice_pitch, num_events_in_wait_list,
  event_wait_list, event, errcode_ret))
+*/
 
+/*
 OCL_FUNC(cl_int, clRetainProgram, (cl_program program), (program))
 
 OCL_FUNC(cl_int, clGetKernelInfo,
@@ -1693,6 +1713,9 @@ String Device::name() const
 String Device::extensions() const
 { return p ? p->getStrProp(CL_DEVICE_EXTENSIONS) : String(); }
 
+String Device::version() const
+{ return p ? p->getStrProp(CL_DEVICE_VERSION) : String(); }
+
 String Device::vendor() const
 { return p ? p->getStrProp(CL_DEVICE_VENDOR) : String(); }
 
@@ -1701,6 +1724,9 @@ String Device::OpenCL_C_Version() const
 
 String Device::OpenCLVersion() const
 { return p ? p->getStrProp(CL_DEVICE_EXTENSIONS) : String(); }
+
+String Device::deviceVersion() const
+{ return p ? p->getStrProp(CL_DEVICE_VERSION) : String(); }
 
 String Device::driverVersion() const
 { return p ? p->getStrProp(CL_DRIVER_VERSION) : String(); }
@@ -1928,7 +1954,7 @@ inline cl_int getStringInfo(Functor f, ObjectType obj, cl_uint name, std::string
     }
 
     return CL_SUCCESS;
-};
+}
 
 static void split(const std::string &s, char delim, std::vector<std::string> &elems) {
     elems.clear();
@@ -2684,6 +2710,12 @@ int Kernel::set(int i, const void* value, size_t sz)
     if( !p || !p->handle || clSetKernelArg(p->handle, (cl_uint)i, sz, value) < 0 )
         return -1;
     return i+1;
+}
+
+int Kernel::set(int i, const Image2D& image2D)
+{
+    cl_mem h = (cl_mem)image2D.ptr();
+    return set(i, &h, sizeof(h));
 }
 
 int Kernel::set(int i, const UMat& m)
@@ -3525,7 +3557,7 @@ public:
         // we can do it in 2 cases:
         //    1. we overwrite the whole content
         //    2. we overwrite part of the matrix, but the GPU copy is out-of-date
-        if( u->data && (u->hostCopyObsolete() <= u->deviceCopyObsolete() || total == u->size))
+        if( u->data && (u->hostCopyObsolete() < u->deviceCopyObsolete() || total == u->size))
         {
             Mat::getStdAllocator()->upload(u, srcptr, dims, sz, dstofs, dststep, srcstep);
             u->markHostCopyObsolete(false);
@@ -3538,9 +3570,6 @@ public:
 
         if( iscontinuous )
         {
-            int crc = 0;
-            for( size_t i = 0; i < total; i++ )
-                crc ^= ((uchar*)srcptr)[i];
             CV_Assert( clEnqueueWriteBuffer(q, (cl_mem)u->handle,
                 CL_TRUE, dstrawofs, total, srcptr, 0, 0, 0) >= 0 );
         }
@@ -3576,12 +3605,12 @@ public:
         UMatDataAutoLock src_autolock(src);
         UMatDataAutoLock dst_autolock(dst);
 
-        if( !src->handle || (src->data && src->hostCopyObsolete() <= src->deviceCopyObsolete()) )
+        if( !src->handle || (src->data && src->hostCopyObsolete() < src->deviceCopyObsolete()) )
         {
             upload(dst, src->data + srcrawofs, dims, sz, dstofs, dststep, srcstep);
             return;
         }
-        if( !dst->handle || (dst->data && dst->hostCopyObsolete() <= dst->deviceCopyObsolete()) )
+        if( !dst->handle || (dst->data && dst->hostCopyObsolete() < dst->deviceCopyObsolete()) )
         {
             download(src, dst->data + dstrawofs, dims, sz, srcofs, srcstep, dststep);
             dst->markHostCopyObsolete(false);
@@ -3622,6 +3651,110 @@ MatAllocator* getOpenCLAllocator()
 {
     static OpenCLAllocator allocator;
     return &allocator;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+static void getDevices(std::vector<cl_device_id>& devices,cl_platform_id& platform)
+{
+    cl_int status = CL_SUCCESS;
+    cl_uint numDevices = 0;
+    status = clGetDeviceIDs(platform, (cl_device_type)Device::TYPE_ALL, 0, NULL, &numDevices);
+    CV_Assert(status == CL_SUCCESS);
+    if (numDevices == 0)
+        return;
+    devices.resize((size_t)numDevices);
+    status = clGetDeviceIDs(platform, (cl_device_type)Device::TYPE_ALL, numDevices, &devices[0], &numDevices);
+    CV_Assert(status == CL_SUCCESS);
+    devices.resize(numDevices);
+}
+
+struct PlatformInfo2::Impl
+{
+    Impl(void* id)
+    {
+        handle = *(cl_platform_id*)id;
+        getDevices(devices, handle);
+    }
+
+    String getStrProp(cl_device_info prop) const
+    {
+        char buf[1024];
+        size_t sz=0;
+        return clGetPlatformInfo(handle, prop, sizeof(buf)-16, buf, &sz) >= 0 &&
+            sz < sizeof(buf) ? String(buf) : String();
+    }
+
+    IMPLEMENT_REFCOUNTABLE();
+    std::vector<cl_device_id> devices;
+    cl_platform_id handle;
+};
+
+PlatformInfo2::PlatformInfo2()
+{
+    p = 0;
+}
+
+PlatformInfo2::PlatformInfo2(void* platform_id)
+{
+    p = new Impl(platform_id);
+}
+
+PlatformInfo2::~PlatformInfo2()
+{
+    if(p)
+        p->release();
+}
+
+int PlatformInfo2::deviceNumber() const
+{
+    return p ? (int)p->devices.size() : 0;
+}
+
+void PlatformInfo2::getDevice(Device& device, int d) const
+{
+    CV_Assert(d < (int)p->devices.size() );
+    if(p)
+        device.set(p->devices[d]);
+}
+
+String PlatformInfo2::name() const
+{
+    return p ? p->getStrProp(CL_PLATFORM_NAME) : String();
+}
+
+String PlatformInfo2::vendor() const
+{
+    return p ? p->getStrProp(CL_PLATFORM_VENDOR) : String();
+}
+
+String PlatformInfo2::version() const
+{
+    return p ? p->getStrProp(CL_PLATFORM_VERSION) : String();
+}
+
+static void getPlatforms(std::vector<cl_platform_id>& platforms)
+{
+    cl_int status = CL_SUCCESS;
+    cl_uint numPlatforms = 0;
+    status = clGetPlatformIDs(0, NULL, &numPlatforms);
+    CV_Assert(status == CL_SUCCESS);
+    if (numPlatforms == 0)
+        return;
+    platforms.resize((size_t)numPlatforms);
+    status = clGetPlatformIDs(numPlatforms, &platforms[0], &numPlatforms);
+    CV_Assert(status == CL_SUCCESS);
+    platforms.resize(numPlatforms);
+}
+
+void getPlatfomsInfo(std::vector<PlatformInfo2>& platformsInfo)
+{
+    std::vector<cl_platform_id> platforms;
+    getPlatforms(platforms);
+    for (size_t i = 0; i < platforms.size(); i++)
+    {
+        platformsInfo.push_back( PlatformInfo2((void*)&platforms[i]) );
+    }
 }
 
 const char* typeToStr(int t)
@@ -3679,6 +3812,153 @@ const char* convertTypeStr(int sdepth, int ddepth, int cn, char* buf)
         sprintf(buf, "convert_%s_sat", typestr);
     }
     return buf;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// deviceVersion has format
+//   OpenCL<space><major_version.minor_version><space><vendor-specific information>
+// by specification
+//   http://www.khronos.org/registry/cl/sdk/1.1/docs/man/xhtml/clGetDeviceInfo.html
+//   http://www.khronos.org/registry/cl/sdk/1.2/docs/man/xhtml/clGetDeviceInfo.html
+static void parseDeviceVersion(const String &deviceVersion, int &major, int &minor)
+{
+    major = minor = 0;
+    if (10 >= deviceVersion.length())
+        return;
+    const char *pstr = deviceVersion.c_str();
+    if (0 != strncmp(pstr, "OpenCL ", 7))
+        return;
+    size_t ppos = deviceVersion.find('.', 7);
+    if (String::npos == ppos)
+        return;
+    String temp = deviceVersion.substr(7, ppos - 7);
+    major = atoi(temp.c_str());
+    temp = deviceVersion.substr(ppos + 1);
+    minor = atoi(temp.c_str());
+}
+
+struct Image2D::Impl
+{
+    Impl(const UMat &src)
+    {
+        handle = 0;
+        refcount = 1;
+        init(src);
+    }
+    ~Impl()
+    {
+        if (handle)
+            clReleaseMemObject(handle);
+    }
+    void init(const UMat &src)
+    {
+        cl_image_format format;
+        int err;
+        int depth    = src.depth();
+        int channels = src.channels();
+
+        switch(depth)
+        {
+        case CV_8U:
+            format.image_channel_data_type = CL_UNSIGNED_INT8;
+            break;
+        case CV_32S:
+            format.image_channel_data_type = CL_UNSIGNED_INT32;
+            break;
+        case CV_32F:
+            format.image_channel_data_type = CL_FLOAT;
+            break;
+        default:
+            CV_Error(-1, "Image forma is not supported");
+            break;
+        }
+        switch(channels)
+        {
+        case 1:
+            format.image_channel_order     = CL_R;
+            break;
+        case 3:
+            format.image_channel_order     = CL_RGB;
+            break;
+        case 4:
+            format.image_channel_order     = CL_RGBA;
+            break;
+        default:
+            CV_Error(-1, "Image format is not supported");
+            break;
+        }
+#ifdef CL_VERSION_1_2
+        //this enables backwards portability to
+        //run on OpenCL 1.1 platform if library binaries are compiled with OpenCL 1.2 support
+        int minor, major;
+        parseDeviceVersion(Device::getDefault().deviceVersion(), major, minor);
+        if ((1 < major) || ((1 == major) && (2 <= minor)))
+        {
+            cl_image_desc desc;
+            desc.image_type       = CL_MEM_OBJECT_IMAGE2D;
+            desc.image_width      = src.cols;
+            desc.image_height     = src.rows;
+            desc.image_depth      = 0;
+            desc.image_array_size = 1;
+            desc.image_row_pitch  = 0;
+            desc.image_slice_pitch = 0;
+            desc.buffer           = NULL;
+            desc.num_mip_levels   = 0;
+            desc.num_samples      = 0;
+            handle = clCreateImage((cl_context)Context2::getDefault().ptr(), CL_MEM_READ_WRITE, &format, &desc, NULL, &err);
+        }
+        else
+#endif
+        {
+            handle = clCreateImage2D((cl_context)Context2::getDefault().ptr(), CL_MEM_READ_WRITE, &format, src.cols, src.rows, 0, NULL, &err);
+        }
+        size_t origin[] = { 0, 0, 0 };
+        size_t region[] = { src.cols, src.rows, 1 };
+
+        cl_mem devData;
+        if (!src.isContinuous())
+        {
+            devData = clCreateBuffer((cl_context)Context2::getDefault().ptr(), CL_MEM_READ_ONLY, src.cols * src.rows * src.elemSize(), NULL, NULL);
+            const size_t roi[3] = {src.cols * src.elemSize(), src.rows, 1};
+            clEnqueueCopyBufferRect((cl_command_queue)Queue::getDefault().ptr(), (cl_mem)src.handle(ACCESS_READ), devData, origin, origin,
+                roi, src.step, 0, src.cols * src.elemSize(), 0, 0, NULL, NULL);
+            clFlush((cl_command_queue)Queue::getDefault().ptr());
+        }
+        else
+        {
+            devData = (cl_mem)src.handle(ACCESS_READ);
+        }
+
+        clEnqueueCopyBufferToImage((cl_command_queue)Queue::getDefault().ptr(), devData, handle, 0, origin, region, 0, NULL, 0);
+        if (!src.isContinuous())
+        {
+            clFlush((cl_command_queue)Queue::getDefault().ptr());
+            clReleaseMemObject(devData);
+        }
+    }
+
+    IMPLEMENT_REFCOUNTABLE();
+
+    cl_mem handle;
+};
+
+Image2D::Image2D()
+{
+    p = NULL;
+}
+Image2D::Image2D(const UMat &src)
+{
+    p = new Impl(src);
+}
+Image2D::~Image2D()
+{
+    if (p)
+        p->release();
+}
+
+void* Image2D::ptr() const
+{
+    return p ? p->handle : 0;
 }
 
 }}
