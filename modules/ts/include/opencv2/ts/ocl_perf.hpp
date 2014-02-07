@@ -99,9 +99,13 @@ using std::tr1::tuple;
 #define OCL_TEST_CYCLE() \
     for (cvtest::ocl::perf::safeFinish(); startTimer(), next(); cvtest::ocl::perf::safeFinish(), stopTimer())
 
+#define OCL_TEST_CYCLE_N(n) \
+    for(declare.iterations(n), cvtest::ocl::perf::safeFinish(); startTimer(), next(); cvtest::ocl::perf::safeFinish(), stopTimer())
+
 #define OCL_TEST_CYCLE_MULTIRUN(runsNum) \
     for (declare.runs(runsNum), cvtest::ocl::perf::safeFinish(); startTimer(), next(); cvtest::ocl::perf::safeFinish(), stopTimer()) \
         for (int r = 0; r < runsNum; cvtest::ocl::perf::safeFinish(), ++r)
+
 
 namespace perf {
 
@@ -115,7 +119,7 @@ CV_EXPORTS void randu(InputOutputArray dst);
 inline void safeFinish()
 {
     if (cv::ocl::useOpenCL())
-        cv::ocl::finish2();
+        cv::ocl::finish();
 }
 
 } // namespace perf
