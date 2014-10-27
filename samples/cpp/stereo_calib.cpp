@@ -23,6 +23,7 @@
    ************************************************** */
 
 #include "opencv2/calib3d/calib3d.hpp"
+#include "opencv2/imgcodecs.hpp"
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
 
@@ -236,7 +237,7 @@ StereoCalib(const vector<string>& imagelist, Size boardSize, bool useCalibrated=
         fs.release();
     }
     else
-        cout << "Error: can not save the intrinsic parameters\n";
+        cout << "Error: can not save the extrinsic parameters\n";
 
     // OpenCV can handle left-right
     // or up-down camera arrangements

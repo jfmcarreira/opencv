@@ -25,7 +25,7 @@ Here's a sample usage of :operationsonarrays:`dft() <dft>` :
    :language: cpp
    :linenos:
    :tab-width: 4
-   :lines: 1-3, 5, 19-20, 23-78
+   :lines: 1-4, 6, 20-21, 24-79
 
 Explanation
 ===========
@@ -120,8 +120,8 @@ In this sample I'll show how to calculate and show the *magnitude* image of a Fo
 
    .. code-block:: cpp
 
-      normalize(magI, magI, 0, 1, CV_MINMAX); // Transform the matrix with float values into a
-                                              // viewable image form (float between values 0 and 1).
+      normalize(magI, magI, 0, 1, NORM_MINMAX); // Transform the matrix with float values into a
+                                                // viewable image form (float between values 0 and 1).
 
 Result
 ======

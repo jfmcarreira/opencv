@@ -493,7 +493,7 @@ public:
     template<typename T2> operator Scalar_<T2>() const;
 
     //! per-element product
-    Scalar_<_Tp> mul(const Scalar_<_Tp>& t, double scale=1 ) const;
+    Scalar_<_Tp> mul(const Scalar_<_Tp>& a, double scale=1 ) const;
 
     // returns (v0, -v1, -v2, -v3)
     Scalar_<_Tp> conj() const;
@@ -995,6 +995,30 @@ Point_<_Tp>& operator *= (Point_<_Tp>& a, double b)
 }
 
 template<typename _Tp> static inline
+Point_<_Tp>& operator /= (Point_<_Tp>& a, int b)
+{
+    a.x = saturate_cast<_Tp>(a.x / b);
+    a.y = saturate_cast<_Tp>(a.y / b);
+    return a;
+}
+
+template<typename _Tp> static inline
+Point_<_Tp>& operator /= (Point_<_Tp>& a, float b)
+{
+    a.x = saturate_cast<_Tp>(a.x / b);
+    a.y = saturate_cast<_Tp>(a.y / b);
+    return a;
+}
+
+template<typename _Tp> static inline
+Point_<_Tp>& operator /= (Point_<_Tp>& a, double b)
+{
+    a.x = saturate_cast<_Tp>(a.x / b);
+    a.y = saturate_cast<_Tp>(a.y / b);
+    return a;
+}
+
+template<typename _Tp> static inline
 double norm(const Point_<_Tp>& pt)
 {
     return std::sqrt((double)pt.x*pt.x + (double)pt.y*pt.y);
@@ -1078,6 +1102,30 @@ Point3_<_Tp> operator * (const Matx<_Tp, 3, 3>& a, const Point_<_Tp>& b)
 {
     Matx<_Tp, 3, 1> tmp = a * Vec<_Tp,3>(b.x, b.y, 1);
     return Point3_<_Tp>(tmp.val[0], tmp.val[1], tmp.val[2]);
+}
+
+template<typename _Tp> static inline
+Point_<_Tp> operator / (const Point_<_Tp>& a, int b)
+{
+    Point_<_Tp> tmp(a);
+    tmp /= b;
+    return tmp;
+}
+
+template<typename _Tp> static inline
+Point_<_Tp> operator / (const Point_<_Tp>& a, float b)
+{
+    Point_<_Tp> tmp(a);
+    tmp /= b;
+    return tmp;
+}
+
+template<typename _Tp> static inline
+Point_<_Tp> operator / (const Point_<_Tp>& a, double b)
+{
+    Point_<_Tp> tmp(a);
+    tmp /= b;
+    return tmp;
 }
 
 
@@ -1188,6 +1236,33 @@ Point3_<_Tp>& operator *= (Point3_<_Tp>& a, double b)
 }
 
 template<typename _Tp> static inline
+Point3_<_Tp>& operator /= (Point3_<_Tp>& a, int b)
+{
+    a.x = saturate_cast<_Tp>(a.x / b);
+    a.y = saturate_cast<_Tp>(a.y / b);
+    a.z = saturate_cast<_Tp>(a.z / b);
+    return a;
+}
+
+template<typename _Tp> static inline
+Point3_<_Tp>& operator /= (Point3_<_Tp>& a, float b)
+{
+    a.x = saturate_cast<_Tp>(a.x / b);
+    a.y = saturate_cast<_Tp>(a.y / b);
+    a.z = saturate_cast<_Tp>(a.z / b);
+    return a;
+}
+
+template<typename _Tp> static inline
+Point3_<_Tp>& operator /= (Point3_<_Tp>& a, double b)
+{
+    a.x = saturate_cast<_Tp>(a.x / b);
+    a.y = saturate_cast<_Tp>(a.y / b);
+    a.z = saturate_cast<_Tp>(a.z / b);
+    return a;
+}
+
+template<typename _Tp> static inline
 double norm(const Point3_<_Tp>& pt)
 {
     return std::sqrt((double)pt.x*pt.x + (double)pt.y*pt.y + (double)pt.z*pt.z);
@@ -1272,6 +1347,30 @@ Matx<_Tp, 4, 1> operator * (const Matx<_Tp, 4, 4>& a, const Point3_<_Tp>& b)
     return a * Matx<_Tp, 4, 1>(b.x, b.y, b.z, 1);
 }
 
+template<typename _Tp> static inline
+Point3_<_Tp> operator / (const Point3_<_Tp>& a, int b)
+{
+    Point3_<_Tp> tmp(a);
+    tmp /= b;
+    return tmp;
+}
+
+template<typename _Tp> static inline
+Point3_<_Tp> operator / (const Point3_<_Tp>& a, float b)
+{
+    Point3_<_Tp> tmp(a);
+    tmp /= b;
+    return tmp;
+}
+
+template<typename _Tp> static inline
+Point3_<_Tp> operator / (const Point3_<_Tp>& a, double b)
+{
+    Point3_<_Tp> tmp(a);
+    tmp /= b;
+    return tmp;
+}
+
 
 
 ////////////////////////////////// Size /////////////////////////////////
@@ -1311,23 +1410,36 @@ _Tp Size_<_Tp>::area() const
     return width * height;
 }
 
+template<typename _Tp> static inline
+Size_<_Tp>& operator *= (Size_<_Tp>& a, _Tp b)
+{
+    a.width *= b;
+    a.height *= b;
+    return a;
+}
 
 template<typename _Tp> static inline
 Size_<_Tp> operator * (const Size_<_Tp>& a, _Tp b)
 {
-    return Size_<_Tp>(a.width * b, a.height * b);
+    Size_<_Tp> tmp(a);
+    tmp *= b;
+    return tmp;
 }
 
 template<typename _Tp> static inline
-Size_<_Tp> operator + (const Size_<_Tp>& a, const Size_<_Tp>& b)
+Size_<_Tp>& operator /= (Size_<_Tp>& a, _Tp b)
 {
-    return Size_<_Tp>(a.width + b.width, a.height + b.height);
+    a.width /= b;
+    a.height /= b;
+    return a;
 }
 
 template<typename _Tp> static inline
-Size_<_Tp> operator - (const Size_<_Tp>& a, const Size_<_Tp>& b)
+Size_<_Tp> operator / (const Size_<_Tp>& a, _Tp b)
 {
-    return Size_<_Tp>(a.width - b.width, a.height - b.height);
+    Size_<_Tp> tmp(a);
+    tmp /= b;
+    return tmp;
 }
 
 template<typename _Tp> static inline
@@ -1339,11 +1451,27 @@ Size_<_Tp>& operator += (Size_<_Tp>& a, const Size_<_Tp>& b)
 }
 
 template<typename _Tp> static inline
+Size_<_Tp> operator + (const Size_<_Tp>& a, const Size_<_Tp>& b)
+{
+    Size_<_Tp> tmp(a);
+    tmp += b;
+    return tmp;
+}
+
+template<typename _Tp> static inline
 Size_<_Tp>& operator -= (Size_<_Tp>& a, const Size_<_Tp>& b)
 {
     a.width -= b.width;
     a.height -= b.height;
     return a;
+}
+
+template<typename _Tp> static inline
+Size_<_Tp> operator - (const Size_<_Tp>& a, const Size_<_Tp>& b)
+{
+    Size_<_Tp> tmp(a);
+    tmp -= b;
+    return tmp;
 }
 
 template<typename _Tp> static inline
@@ -1355,7 +1483,7 @@ bool operator == (const Size_<_Tp>& a, const Size_<_Tp>& b)
 template<typename _Tp> static inline
 bool operator != (const Size_<_Tp>& a, const Size_<_Tp>& b)
 {
-    return a.width != b.width || a.height != b.height;
+    return !(a == b);
 }
 
 
@@ -1674,12 +1802,12 @@ Scalar_<_Tp> Scalar_<_Tp>::all(_Tp v0)
 
 
 template<typename _Tp> inline
-Scalar_<_Tp> Scalar_<_Tp>::mul(const Scalar_<_Tp>& t, double scale ) const
+Scalar_<_Tp> Scalar_<_Tp>::mul(const Scalar_<_Tp>& a, double scale ) const
 {
-    return Scalar_<_Tp>(saturate_cast<_Tp>(this->val[0] * t.val[0] * scale),
-                        saturate_cast<_Tp>(this->val[1] * t.val[1] * scale),
-                        saturate_cast<_Tp>(this->val[2] * t.val[2] * scale),
-                        saturate_cast<_Tp>(this->val[3] * t.val[3] * scale));
+    return Scalar_<_Tp>(saturate_cast<_Tp>(this->val[0] * a.val[0] * scale),
+                        saturate_cast<_Tp>(this->val[1] * a.val[1] * scale),
+                        saturate_cast<_Tp>(this->val[2] * a.val[2] * scale),
+                        saturate_cast<_Tp>(this->val[3] * a.val[3] * scale));
 }
 
 template<typename _Tp> inline

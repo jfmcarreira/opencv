@@ -47,6 +47,7 @@
 #include <iostream> // std::cerr
 
 #define CV_OPENCL_ALWAYS_SHOW_BUILD_LOG 0
+#define CV_OPENCL_SHOW_RUN_ERRORS       0
 
 #include "opencv2/core/bufferpool.hpp"
 #ifndef LOG_BUFFER_POOL
@@ -56,6 +57,28 @@
 #   define LOG_BUFFER_POOL(...)
 # endif
 #endif
+
+
+// TODO Move to some common place
+static bool getBoolParameter(const char* name, bool defaultValue)
+{
+    const char* envValue = getenv(name);
+    if (envValue == NULL)
+    {
+        return defaultValue;
+    }
+    cv::String value = envValue;
+    if (value == "1" || value == "True" || value == "true" || value == "TRUE")
+    {
+        return true;
+    }
+    if (value == "0" || value == "False" || value == "false" || value == "FALSE")
+    {
+        return false;
+    }
+    CV_ErrorNoReturn(cv::Error::StsBadArg, cv::format("Invalid value for %s parameter: %s", name, value.c_str()));
+}
+
 
 // TODO Move to some common place
 static size_t getConfigurationParameterForSize(const char* name, size_t defaultValue)
@@ -1305,7 +1328,18 @@ OCL_FUNC(cl_int, clReleaseEvent, (cl_event event), (event))
 #ifdef _DEBUG
 #define CV_OclDbgAssert CV_DbgAssert
 #else
-#define CV_OclDbgAssert(expr) (void)(expr)
+static bool isRaiseError()
+{
+    static bool initialized = false;
+    static bool value = false;
+    if (!initialized)
+    {
+        value = getBoolParameter("OPENCV_OPENCL_RAISE_ERROR", false);
+        initialized = true;
+    }
+    return value;
+}
+#define CV_OclDbgAssert(expr) do { if (isRaiseError()) { CV_Assert(expr); } else { (void)(expr); } } while ((void)0, 0)
 #endif
 
 namespace cv { namespace ocl {
@@ -1548,7 +1582,11 @@ protected:
             {
                 try
                 {
+                    cl_uint major, minor, patch;
                     CV_Assert(clAmdFftInitSetupData(&setupData) == CLFFT_SUCCESS);
+
+                    // it throws exception in case AmdFft binaries are not found
+                    CV_Assert(clAmdFftGetVersion(&major, &minor, &patch) == CLFFT_SUCCESS);
                     g_isAmdFftAvailable = true;
                 }
                 catch (const Exception &)
@@ -1732,7 +1770,7 @@ struct Device::Impl
         if (vendorName_ == "Advanced Micro Devices, Inc." ||
             vendorName_ == "AMD")
             vendorID_ = VENDOR_AMD;
-        else if (vendorName_ == "Intel(R) Corporation")
+        else if (vendorName_ == "Intel(R) Corporation" || vendorName_ == "Intel" || strstr(name_.c_str(), "Iris") != 0)
             vendorID_ = VENDOR_INTEL;
         else if (vendorName_ == "NVIDIA Corporation")
             vendorID_ = VENDOR_NVIDIA;
@@ -2717,7 +2755,7 @@ KernelArg::KernelArg(int _flags, UMat* _m, int _wscale, int _iwscale, const void
 KernelArg KernelArg::Constant(const Mat& m)
 {
     CV_Assert(m.isContinuous());
-    return KernelArg(CONSTANT, 0, 0, 0, m.data, m.total()*m.elemSize());
+    return KernelArg(CONSTANT, 0, 0, 0, m.ptr(), m.total()*m.elemSize());
 }
 
 /////////////////////////////////////////// Kernel /////////////////////////////////////////////
@@ -2855,6 +2893,9 @@ bool Kernel::create(const char* kname, const Program& prog)
         p->release();
         p = 0;
     }
+#ifdef CV_OPENCL_RUN_ASSERT // check kernel compilation fails
+    CV_Assert(p);
+#endif
     return p != 0;
 }
 
@@ -3000,6 +3041,13 @@ bool Kernel::run(int dims, size_t _globalsize[], size_t _localsize[],
     cl_int retval = clEnqueueNDRangeKernel(qq, p->handle, (cl_uint)dims,
                                            offset, globalsize, _localsize, 0, 0,
                                            sync ? 0 : &p->e);
+#if CV_OPENCL_SHOW_RUN_ERRORS
+    if (retval != CL_SUCCESS)
+    {
+        printf("OpenCL program returns error: %d\n", retval);
+        fflush(stdout);
+    }
+#endif
     if( sync || retval != CL_SUCCESS )
     {
         CV_OclDbgAssert(clFinish(qq) == CL_SUCCESS);
@@ -3478,6 +3526,10 @@ protected:
         entry.clBuffer_ = clCreateBuffer((cl_context)ctx.ptr(), CL_MEM_READ_WRITE, entry.capacity_, 0, &retval);
         CV_Assert(retval == CL_SUCCESS);
         CV_Assert(entry.clBuffer_ != NULL);
+        if(retval == CL_SUCCESS)
+        {
+            CV_IMPL_ADD(CV_IMPL_OCL);
+        }
         LOG_BUFFER_POOL("OpenCL allocate %lld (0x%llx) bytes: %p\n",
                 (long long)entry.capacity_, (long long)entry.capacity_, entry.clBuffer_);
     }
@@ -3494,9 +3546,8 @@ public:
     OpenCLBufferPoolImpl()
         : currentReservedSize(0), maxReservedSize(0)
     {
-        // Note: Buffer pool is disabled by default,
-        //       because we didn't receive significant performance improvement
-        maxReservedSize = getConfigurationParameterForSize("OPENCV_OPENCL_BUFFERPOOL_LIMIT", 0);
+        int poolSize = ocl::Device::getDefault().isIntel() ? 1 << 27 : 0;
+        maxReservedSize = getConfigurationParameterForSize("OPENCV_OPENCL_BUFFERPOOL_LIMIT", poolSize);
     }
     virtual ~OpenCLBufferPoolImpl()
     {
@@ -3703,6 +3754,7 @@ public:
                                           CL_MEM_READ_WRITE|createFlags, total, 0, &retval);
             if( !handle || retval != CL_SUCCESS )
                 return defaultAllocate(dims, sizes, type, data, step, flags, usageFlags);
+            CV_IMPL_ADD(CV_IMPL_OCL)
         }
         UMatData* u = new UMatData(this);
         u->data = 0;
@@ -3739,6 +3791,7 @@ public:
                 u->handle = clCreateBuffer(ctx_handle, CL_MEM_COPY_HOST_PTR|CL_MEM_READ_WRITE|createFlags,
                                            u->size, u->origdata, &retval);
                 tempUMatFlags = UMatData::TEMP_COPIED_UMAT;
+
             }
             if(!u->handle || retval != CL_SUCCESS)
                 return false;
@@ -3880,6 +3933,7 @@ public:
                 if(u->data && retval == CL_SUCCESS)
                 {
                     u->markHostCopyObsolete(false);
+                    u->markDeviceMemMapped(true);
                     return;
                 }
 
@@ -3908,6 +3962,7 @@ public:
         if(!u)
             return;
 
+
         CV_Assert(u->handle != 0);
 
         UMatDataAutoLock autolock(u);
@@ -3918,11 +3973,17 @@ public:
 
         cl_command_queue q = (cl_command_queue)Queue::getDefault().ptr();
         cl_int retval = 0;
-        if( !u->copyOnMap() && u->data )
+        if( !u->copyOnMap() && u->deviceMemMapped() )
         {
+            CV_Assert(u->data != NULL);
+            u->markDeviceMemMapped(false);
             CV_Assert( (retval = clEnqueueUnmapMemObject(q,
                                 (cl_mem)u->handle, u->data, 0, 0, 0)) == CL_SUCCESS );
-            CV_OclDbgAssert(clFinish(q) == CL_SUCCESS);
+            if (Device::getDefault().isAMD())
+            {
+                // required for multithreaded applications (see stitching test)
+                CV_OclDbgAssert(clFinish(q) == CL_SUCCESS);
+            }
             u->data = 0;
         }
         else if( u->copyOnMap() && u->deviceCopyObsolete() )
@@ -4139,19 +4200,23 @@ public:
         CV_Assert(dst->refcount == 0);
         cl_command_queue q = (cl_command_queue)Queue::getDefault().ptr();
 
+        cl_int retval;
         if( iscontinuous )
         {
-            CV_Assert( clEnqueueCopyBuffer(q, (cl_mem)src->handle, (cl_mem)dst->handle,
-                                           srcrawofs, dstrawofs, total, 0, 0, 0) == CL_SUCCESS );
+            CV_Assert( (retval = clEnqueueCopyBuffer(q, (cl_mem)src->handle, (cl_mem)dst->handle,
+                                           srcrawofs, dstrawofs, total, 0, 0, 0)) == CL_SUCCESS );
         }
         else
         {
-            cl_int retval;
             CV_Assert( (retval = clEnqueueCopyBufferRect(q, (cl_mem)src->handle, (cl_mem)dst->handle,
                                                new_srcofs, new_dstofs, new_sz,
                                                new_srcstep[0], new_srcstep[1],
                                                new_dststep[0], new_dststep[1],
                                                0, 0, 0)) == CL_SUCCESS );
+        }
+        if(retval == CL_SUCCESS)
+        {
+            CV_IMPL_ADD(CV_IMPL_OCL)
         }
 
         dst->markHostCopyObsolete(true);
@@ -4336,6 +4401,23 @@ const char* memopTypeToStr(int type)
     return cn > 16 ? "?" : tab[depth*16 + cn-1];
 }
 
+const char* vecopTypeToStr(int type)
+{
+    static const char* tab[] =
+    {
+        "uchar", "short", "uchar3", "int", 0, 0, 0, "int2", 0, 0, 0, 0, 0, 0, 0, "int4",
+        "char", "short", "char3", "int", 0, 0, 0, "int2", 0, 0, 0, 0, 0, 0, 0, "int4",
+        "ushort", "int", "ushort3", "int2",0, 0, 0, "int4", 0, 0, 0, 0, 0, 0, 0, "int8",
+        "short", "int", "short3", "int2", 0, 0, 0, "int4", 0, 0, 0, 0, 0, 0, 0, "int8",
+        "int", "int2", "int3", "int4", 0, 0, 0, "int8", 0, 0, 0, 0, 0, 0, 0, "int16",
+        "int", "int2", "int3", "int4", 0, 0, 0, "int8", 0, 0, 0, 0, 0, 0, 0, "int16",
+        "ulong", "ulong2", "ulong3", "ulong4", 0, 0, 0, "ulong8", 0, 0, 0, 0, 0, 0, 0, "ulong16",
+        "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?"
+    };
+    int cn = CV_MAT_CN(type), depth = CV_MAT_DEPTH(type);
+    return cn > 16 ? "?" : tab[depth*16 + cn-1];
+}
+
 const char* convertTypeStr(int sdepth, int ddepth, int cn, char* buf)
 {
     if( sdepth == ddepth )
@@ -4360,7 +4442,7 @@ template <typename T>
 static std::string kerToStr(const Mat & k)
 {
     int width = k.cols - 1, depth = k.depth();
-    const T * const data = reinterpret_cast<const T *>(k.data);
+    const T * const data = k.ptr<T>();
 
     std::ostringstream stream;
     stream.precision(10);
@@ -4414,42 +4496,56 @@ String kernelToStr(InputArray _kernel, int ddepth, const char * name)
         if (!src.empty()) \
         { \
             CV_Assert(src.isMat() || src.isUMat()); \
-            int ctype = src.type(), ccn = CV_MAT_CN(ctype); \
             Size csize = src.size(); \
-            cols.push_back(ccn * csize.width); \
-            if (ctype != type) \
+            int ctype = src.type(), ccn = CV_MAT_CN(ctype), cdepth = CV_MAT_DEPTH(ctype), \
+                ckercn = vectorWidths[cdepth], cwidth = ccn * csize.width; \
+            if (cwidth < ckercn || ckercn <= 0) \
+                return 1; \
+            cols.push_back(cwidth); \
+            if (strat == OCL_VECTOR_OWN && ctype != ref_type) \
                 return 1; \
             offsets.push_back(src.offset()); \
             steps.push_back(src.step()); \
+            dividers.push_back(ckercn * CV_ELEM_SIZE1(ctype)); \
+            kercns.push_back(ckercn); \
         } \
     } \
     while ((void)0, 0)
 
 int predictOptimalVectorWidth(InputArray src1, InputArray src2, InputArray src3,
                               InputArray src4, InputArray src5, InputArray src6,
-                              InputArray src7, InputArray src8, InputArray src9)
+                              InputArray src7, InputArray src8, InputArray src9,
+                              OclVectorStrategy strat)
 {
-    int type = src1.type(), depth = CV_MAT_DEPTH(type), cn = CV_MAT_CN(type), esz1 = CV_ELEM_SIZE1(depth);
-    Size ssize = src1.size();
     const ocl::Device & d = ocl::Device::getDefault();
 
     int vectorWidths[] = { d.preferredVectorWidthChar(), d.preferredVectorWidthChar(),
         d.preferredVectorWidthShort(), d.preferredVectorWidthShort(),
         d.preferredVectorWidthInt(), d.preferredVectorWidthFloat(),
-        d.preferredVectorWidthDouble(), -1 }, kercn = vectorWidths[depth];
+        d.preferredVectorWidthDouble(), -1 };
 
     // if the device says don't use vectors
     if (vectorWidths[0] == 1)
     {
         // it's heuristic
-        int vectorWidthsOthers[] = { 16, 16, 8, 8, 1, 1, 1, -1 };
-        kercn = vectorWidthsOthers[depth];
+        vectorWidths[CV_8U] = vectorWidths[CV_8S] = 4;
+        vectorWidths[CV_16U] = vectorWidths[CV_16S] = 2;
+        vectorWidths[CV_32S] = vectorWidths[CV_32F] = vectorWidths[CV_64F] = 1;
     }
 
-    if (ssize.width * cn < kercn || kercn <= 0)
-        return 1;
+    return checkOptimalVectorWidth(vectorWidths, src1, src2, src3, src4, src5, src6, src7, src8, src9, strat);
+}
+
+int checkOptimalVectorWidth(int *vectorWidths,
+                            InputArray src1, InputArray src2, InputArray src3,
+                            InputArray src4, InputArray src5, InputArray src6,
+                            InputArray src7, InputArray src8, InputArray src9,
+                            OclVectorStrategy strat)
+{
+    int ref_type = src1.type();
 
     std::vector<size_t> offsets, steps, cols;
+    std::vector<int> dividers, kercns;
     PROCESS_SRC(src1);
     PROCESS_SRC(src2);
     PROCESS_SRC(src3);
@@ -4461,25 +4557,22 @@ int predictOptimalVectorWidth(InputArray src1, InputArray src2, InputArray src3,
     PROCESS_SRC(src9);
 
     size_t size = offsets.size();
-    int wsz = kercn * esz1;
-    std::vector<int> dividers(size, wsz);
 
     for (size_t i = 0; i < size; ++i)
-        while (offsets[i] % dividers[i] != 0 || steps[i] % dividers[i] != 0 || cols[i] % dividers[i] != 0)
-            dividers[i] >>= 1;
+        while (offsets[i] % dividers[i] != 0 || steps[i] % dividers[i] != 0 || cols[i] % kercns[i] != 0)
+            dividers[i] >>= 1, kercns[i] >>= 1;
 
     // default strategy
-    for (size_t i = 0; i < size; ++i)
-        if (dividers[i] != wsz)
-        {
-            kercn = 1;
-            break;
-        }
-
-    // another strategy
-//    width = *std::min_element(dividers.begin(), dividers.end());
+    int kercn = *std::min_element(kercns.begin(), kercns.end());
 
     return kercn;
+}
+
+int predictOptimalVectorWidthMax(InputArray src1, InputArray src2, InputArray src3,
+                                 InputArray src4, InputArray src5, InputArray src6,
+                                 InputArray src7, InputArray src8, InputArray src9)
+{
+    return predictOptimalVectorWidth(src1, src2, src3, src4, src5, src6, src7, src8, src9, OCL_VECTOR_MAX);
 }
 
 #undef PROCESS_SRC
@@ -4536,6 +4629,9 @@ struct Image2D::Impl
 
     static bool isFormatSupported(cl_image_format format)
     {
+        if (!haveOpenCL())
+            CV_Error(Error::OpenCLApiCallError, "OpenCL runtime not found!");
+
         cl_context context = (cl_context)Context::getDefault().ptr();
         // Figure out how many formats are supported by this context.
         cl_uint numFormats = 0;
@@ -4559,6 +4655,10 @@ struct Image2D::Impl
 
     void init(const UMat &src, bool norm, bool alias)
     {
+        if (!haveOpenCL())
+            CV_Error(Error::OpenCLApiCallError, "OpenCL runtime not found!");
+
+        CV_Assert(!src.empty());
         CV_Assert(ocl::Device::getDefault().imageSupport());
 
         int err, depth = src.depth(), cn = src.channels();
@@ -4567,6 +4667,9 @@ struct Image2D::Impl
 
         if (!isFormatSupported(format))
             CV_Error(Error::OpenCLApiCallError, "Image format is not supported");
+
+        if (alias && !src.handle(ACCESS_RW))
+            CV_Error(Error::OpenCLApiCallError, "Incorrect UMat, handle is null");
 
         cl_context context = (cl_context)Context::getDefault().ptr();
         cl_command_queue queue = (cl_command_queue)Queue::getDefault().ptr();
@@ -4652,7 +4755,7 @@ bool Image2D::canCreateAlias(const UMat &m)
 {
     bool ret = false;
     const Device & d = ocl::Device::getDefault();
-    if (d.imageFromBufferSupport())
+    if (d.imageFromBufferSupport() && !m.empty())
     {
         // This is the required pitch alignment in pixels
         uint pitchAlign = d.imagePitchAlignment();
@@ -4705,6 +4808,18 @@ Image2D::~Image2D()
 void* Image2D::ptr() const
 {
     return p ? p->handle : 0;
+}
+
+bool isPerformanceCheckBypassed()
+{
+    static bool initialized = false;
+    static bool value = false;
+    if (!initialized)
+    {
+        value = getBoolParameter("OPENCV_OPENCL_PERF_CHECK_BYPASS", false);
+        initialized = true;
+    }
+    return value;
 }
 
 }}

@@ -32,7 +32,7 @@ Image Watch works with any existing project that uses OpenCV image objects (for 
 
     #include <iostream>                        // std::cout
     #include <opencv2/core/core.hpp>           // cv::Mat
-    #include <opencv2/highgui/highgui.hpp>     // cv::imread()
+    #include <opencv2/imgcodecs/imgcodecs.hpp>     // cv::imread()
     #include <opencv2/imgproc/imgproc.hpp>     // cv::Canny()
 
     using namespace std;
@@ -65,7 +65,7 @@ Image Watch works with any existing project that uses OpenCV image objects (for 
 
         cout << "Loading input image: " << argv[1] << endl;
         Mat input;
-        input = imread(argv[1], CV_LOAD_IMAGE_COLOR);
+        input = imread(argv[1], IMREAD_COLOR);
 
         cout << "Detecting edges in input image" << endl;
         Mat edges;

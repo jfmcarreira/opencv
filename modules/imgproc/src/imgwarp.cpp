@@ -47,7 +47,7 @@
 // */
 
 #include "precomp.hpp"
-#include "opencl_kernels.hpp"
+#include "opencl_kernels_imgproc.hpp"
 
 #if defined (HAVE_IPP) && (IPP_VERSION_MAJOR >= 7)
 static IppStatus sts = ippInit();
@@ -341,7 +341,7 @@ public:
         {
             uchar* D = dst.data + dst.step*y;
             int sy = std::min(cvFloor(y*ify), ssize.height-1);
-            const uchar* S = src.data + src.step*sy;
+            const uchar* S = src.ptr(sy);
 
             switch( pix_size )
             {
@@ -894,6 +894,183 @@ struct VResizeCubicVec_32f
     }
 };
 
+#elif CV_NEON
+
+typedef VResizeNoVec VResizeLinearVec_32s8u;
+
+struct VResizeLinearVec_32f16u
+{
+    int operator()(const uchar** _src, uchar* _dst, const uchar* _beta, int width ) const
+    {
+        const float** src = (const float**)_src;
+        const float* beta = (const float*)_beta;
+        const float *S0 = src[0], *S1 = src[1];
+        ushort* dst = (ushort*)_dst;
+        int x = 0;
+
+        float32x4_t v_b0 = vdupq_n_f32(beta[0]), v_b1 = vdupq_n_f32(beta[1]);
+
+        for( ; x <= width - 8; x += 8 )
+        {
+            float32x4_t v_src00 = vld1q_f32(S0 + x), v_src01 = vld1q_f32(S0 + x + 4);
+            float32x4_t v_src10 = vld1q_f32(S1 + x), v_src11 = vld1q_f32(S1 + x + 4);
+
+            float32x4_t v_dst0 = vmlaq_f32(vmulq_f32(v_src00, v_b0), v_src10, v_b1);
+            float32x4_t v_dst1 = vmlaq_f32(vmulq_f32(v_src01, v_b0), v_src11, v_b1);
+
+            vst1q_u16(dst + x, vcombine_u16(vqmovn_u32(cv_vrndq_u32_f32(v_dst0)),
+                                            vqmovn_u32(cv_vrndq_u32_f32(v_dst1))));
+        }
+
+        return x;
+    }
+};
+
+struct VResizeLinearVec_32f16s
+{
+    int operator()(const uchar** _src, uchar* _dst, const uchar* _beta, int width ) const
+    {
+        const float** src = (const float**)_src;
+        const float* beta = (const float*)_beta;
+        const float *S0 = src[0], *S1 = src[1];
+        short* dst = (short*)_dst;
+        int x = 0;
+
+        float32x4_t v_b0 = vdupq_n_f32(beta[0]), v_b1 = vdupq_n_f32(beta[1]);
+
+        for( ; x <= width - 8; x += 8 )
+        {
+            float32x4_t v_src00 = vld1q_f32(S0 + x), v_src01 = vld1q_f32(S0 + x + 4);
+            float32x4_t v_src10 = vld1q_f32(S1 + x), v_src11 = vld1q_f32(S1 + x + 4);
+
+            float32x4_t v_dst0 = vmlaq_f32(vmulq_f32(v_src00, v_b0), v_src10, v_b1);
+            float32x4_t v_dst1 = vmlaq_f32(vmulq_f32(v_src01, v_b0), v_src11, v_b1);
+
+            vst1q_s16(dst + x, vcombine_s16(vqmovn_s32(cv_vrndq_s32_f32(v_dst0)),
+                                            vqmovn_s32(cv_vrndq_s32_f32(v_dst1))));
+        }
+
+        return x;
+    }
+};
+
+struct VResizeLinearVec_32f
+{
+    int operator()(const uchar** _src, uchar* _dst, const uchar* _beta, int width ) const
+    {
+        const float** src = (const float**)_src;
+        const float* beta = (const float*)_beta;
+        const float *S0 = src[0], *S1 = src[1];
+        float* dst = (float*)_dst;
+        int x = 0;
+
+        float32x4_t v_b0 = vdupq_n_f32(beta[0]), v_b1 = vdupq_n_f32(beta[1]);
+
+        for( ; x <= width - 8; x += 8 )
+        {
+            float32x4_t v_src00 = vld1q_f32(S0 + x), v_src01 = vld1q_f32(S0 + x + 4);
+            float32x4_t v_src10 = vld1q_f32(S1 + x), v_src11 = vld1q_f32(S1 + x + 4);
+
+            vst1q_f32(dst + x, vmlaq_f32(vmulq_f32(v_src00, v_b0), v_src10, v_b1));
+            vst1q_f32(dst + x + 4, vmlaq_f32(vmulq_f32(v_src01, v_b0), v_src11, v_b1));
+        }
+
+        return x;
+    }
+};
+
+typedef VResizeNoVec VResizeCubicVec_32s8u;
+
+struct VResizeCubicVec_32f16u
+{
+    int operator()(const uchar** _src, uchar* _dst, const uchar* _beta, int width ) const
+    {
+        const float** src = (const float**)_src;
+        const float* beta = (const float*)_beta;
+        const float *S0 = src[0], *S1 = src[1], *S2 = src[2], *S3 = src[3];
+        ushort* dst = (ushort*)_dst;
+        int x = 0;
+        float32x4_t v_b0 = vdupq_n_f32(beta[0]), v_b1 = vdupq_n_f32(beta[1]),
+                    v_b2 = vdupq_n_f32(beta[2]), v_b3 = vdupq_n_f32(beta[3]);
+
+        for( ; x <= width - 8; x += 8 )
+        {
+            float32x4_t v_dst0 = vmlaq_f32(vmlaq_f32(vmlaq_f32(vmulq_f32(v_b0, vld1q_f32(S0 + x)),
+                                                                         v_b1, vld1q_f32(S1 + x)),
+                                                                         v_b2, vld1q_f32(S2 + x)),
+                                                                         v_b3, vld1q_f32(S3 + x));
+            float32x4_t v_dst1 = vmlaq_f32(vmlaq_f32(vmlaq_f32(vmulq_f32(v_b0, vld1q_f32(S0 + x + 4)),
+                                                                         v_b1, vld1q_f32(S1 + x + 4)),
+                                                                         v_b2, vld1q_f32(S2 + x + 4)),
+                                                                         v_b3, vld1q_f32(S3 + x + 4));
+
+            vst1q_u16(dst + x, vcombine_u16(vqmovn_u32(cv_vrndq_u32_f32(v_dst0)),
+                                            vqmovn_u32(cv_vrndq_u32_f32(v_dst1))));
+        }
+
+        return x;
+    }
+};
+
+struct VResizeCubicVec_32f16s
+{
+    int operator()(const uchar** _src, uchar* _dst, const uchar* _beta, int width ) const
+    {
+        const float** src = (const float**)_src;
+        const float* beta = (const float*)_beta;
+        const float *S0 = src[0], *S1 = src[1], *S2 = src[2], *S3 = src[3];
+        short* dst = (short*)_dst;
+        int x = 0;
+        float32x4_t v_b0 = vdupq_n_f32(beta[0]), v_b1 = vdupq_n_f32(beta[1]),
+                    v_b2 = vdupq_n_f32(beta[2]), v_b3 = vdupq_n_f32(beta[3]);
+
+        for( ; x <= width - 8; x += 8 )
+        {
+            float32x4_t v_dst0 = vmlaq_f32(vmlaq_f32(vmlaq_f32(vmulq_f32(v_b0, vld1q_f32(S0 + x)),
+                                                                         v_b1, vld1q_f32(S1 + x)),
+                                                                         v_b2, vld1q_f32(S2 + x)),
+                                                                         v_b3, vld1q_f32(S3 + x));
+            float32x4_t v_dst1 = vmlaq_f32(vmlaq_f32(vmlaq_f32(vmulq_f32(v_b0, vld1q_f32(S0 + x + 4)),
+                                                                         v_b1, vld1q_f32(S1 + x + 4)),
+                                                                         v_b2, vld1q_f32(S2 + x + 4)),
+                                                                         v_b3, vld1q_f32(S3 + x + 4));
+
+            vst1q_s16(dst + x, vcombine_s16(vqmovn_s32(cv_vrndq_s32_f32(v_dst0)),
+                                            vqmovn_s32(cv_vrndq_s32_f32(v_dst1))));
+        }
+
+        return x;
+    }
+};
+
+struct VResizeCubicVec_32f
+{
+    int operator()(const uchar** _src, uchar* _dst, const uchar* _beta, int width ) const
+    {
+        const float** src = (const float**)_src;
+        const float* beta = (const float*)_beta;
+        const float *S0 = src[0], *S1 = src[1], *S2 = src[2], *S3 = src[3];
+        float* dst = (float*)_dst;
+        int x = 0;
+        float32x4_t v_b0 = vdupq_n_f32(beta[0]), v_b1 = vdupq_n_f32(beta[1]),
+                    v_b2 = vdupq_n_f32(beta[2]), v_b3 = vdupq_n_f32(beta[3]);
+
+        for( ; x <= width - 8; x += 8 )
+        {
+            vst1q_f32(dst + x, vmlaq_f32(vmlaq_f32(vmlaq_f32(vmulq_f32(v_b0, vld1q_f32(S0 + x)),
+                                                                       v_b1, vld1q_f32(S1 + x)),
+                                                                       v_b2, vld1q_f32(S2 + x)),
+                                                                       v_b3, vld1q_f32(S3 + x)));
+            vst1q_f32(dst + x + 4, vmlaq_f32(vmlaq_f32(vmlaq_f32(vmulq_f32(v_b0, vld1q_f32(S0 + x + 4)),
+                                                                          v_b1, vld1q_f32(S1 + x + 4)),
+                                                                          v_b2, vld1q_f32(S2 + x + 4)),
+                                                                          v_b3, vld1q_f32(S3 + x + 4)));
+        }
+
+        return x;
+    }
+};
+
 #else
 
 typedef VResizeNoVec VResizeLinearVec_32s8u;
@@ -1265,7 +1442,7 @@ public:
                 }
                 if( k1 == ksize )
                     k0 = std::min(k0, k); // remember the first row that needs to be computed
-                srows[k] = (T*)(src.data + src.step*sy);
+                srows[k] = src.template ptr<T>(sy);
                 prev_sy[k] = sy;
             }
 
@@ -1322,7 +1499,120 @@ struct ResizeAreaFastNoVec
     { return 0; }
 };
 
-#if CV_SSE2
+#if CV_NEON
+
+class ResizeAreaFastVec_SIMD_8u
+{
+public:
+    ResizeAreaFastVec_SIMD_8u(int _cn, int _step) :
+        cn(_cn), step(_step)
+    {
+    }
+
+    int operator() (const uchar* S, uchar* D, int w) const
+    {
+        int dx = 0;
+        const uchar* S0 = S, * S1 = S0 + step;
+
+        uint16x8_t v_2 = vdupq_n_u16(2);
+
+        if (cn == 1)
+        {
+            for ( ; dx <= w - 16; dx += 16, S0 += 32, S1 += 32, D += 16)
+            {
+                uint8x16x2_t v_row0 = vld2q_u8(S0), v_row1 = vld2q_u8(S1);
+
+                uint16x8_t v_dst0 = vaddl_u8(vget_low_u8(v_row0.val[0]), vget_low_u8(v_row0.val[1]));
+                v_dst0 = vaddq_u16(v_dst0, vaddl_u8(vget_low_u8(v_row1.val[0]), vget_low_u8(v_row1.val[1])));
+                v_dst0 = vshrq_n_u16(vaddq_u16(v_dst0, v_2), 2);
+
+                uint16x8_t v_dst1 = vaddl_u8(vget_high_u8(v_row0.val[0]), vget_high_u8(v_row0.val[1]));
+                v_dst1 = vaddq_u16(v_dst1, vaddl_u8(vget_high_u8(v_row1.val[0]), vget_high_u8(v_row1.val[1])));
+                v_dst1 = vshrq_n_u16(vaddq_u16(v_dst1, v_2), 2);
+
+                vst1q_u8(D, vcombine_u8(vmovn_u16(v_dst0), vmovn_u16(v_dst1)));
+            }
+        }
+        else if (cn == 4)
+        {
+            for ( ; dx <= w - 8; dx += 8, S0 += 16, S1 += 16, D += 8)
+            {
+                uint8x16_t v_row0 = vld1q_u8(S0), v_row1 = vld1q_u8(S1);
+
+                uint16x8_t v_row00 = vmovl_u8(vget_low_u8(v_row0));
+                uint16x8_t v_row01 = vmovl_u8(vget_high_u8(v_row0));
+                uint16x8_t v_row10 = vmovl_u8(vget_low_u8(v_row1));
+                uint16x8_t v_row11 = vmovl_u8(vget_high_u8(v_row1));
+
+                uint16x4_t v_p0 = vadd_u16(vadd_u16(vget_low_u16(v_row00), vget_high_u16(v_row00)),
+                                           vadd_u16(vget_low_u16(v_row10), vget_high_u16(v_row10)));
+                uint16x4_t v_p1 = vadd_u16(vadd_u16(vget_low_u16(v_row01), vget_high_u16(v_row01)),
+                                           vadd_u16(vget_low_u16(v_row11), vget_high_u16(v_row11)));
+                uint16x8_t v_dst = vshrq_n_u16(vaddq_u16(vcombine_u16(v_p0, v_p1), v_2), 2);
+
+                vst1_u8(D, vmovn_u16(v_dst));
+            }
+        }
+
+        return dx;
+    }
+
+private:
+    int cn, step;
+};
+
+class ResizeAreaFastVec_SIMD_16u
+{
+public:
+    ResizeAreaFastVec_SIMD_16u(int _cn, int _step) :
+        cn(_cn), step(_step)
+    {
+    }
+
+    int operator() (const ushort * S, ushort * D, int w) const
+    {
+        int dx = 0;
+        const ushort * S0 = S, * S1 = (const ushort *)((const uchar *)(S0) + step);
+
+        uint32x4_t v_2 = vdupq_n_u32(2);
+
+        if (cn == 1)
+        {
+            for ( ; dx <= w - 8; dx += 8, S0 += 16, S1 += 16, D += 8)
+            {
+                uint16x8x2_t v_row0 = vld2q_u16(S0), v_row1 = vld2q_u16(S1);
+
+                uint32x4_t v_dst0 = vaddl_u16(vget_low_u16(v_row0.val[0]), vget_low_u16(v_row0.val[1]));
+                v_dst0 = vaddq_u32(v_dst0, vaddl_u16(vget_low_u16(v_row1.val[0]), vget_low_u16(v_row1.val[1])));
+                v_dst0 = vshrq_n_u32(vaddq_u32(v_dst0, v_2), 2);
+
+                uint32x4_t v_dst1 = vaddl_u16(vget_high_u16(v_row0.val[0]), vget_high_u16(v_row0.val[1]));
+                v_dst1 = vaddq_u32(v_dst1, vaddl_u16(vget_high_u16(v_row1.val[0]), vget_high_u16(v_row1.val[1])));
+                v_dst1 = vshrq_n_u32(vaddq_u32(v_dst1, v_2), 2);
+
+                vst1q_u16(D, vcombine_u16(vmovn_u32(v_dst0), vmovn_u32(v_dst1)));
+            }
+        }
+        else if (cn == 4)
+        {
+            for ( ; dx <= w - 4; dx += 4, S0 += 8, S1 += 8, D += 4)
+            {
+                uint16x8_t v_row0 = vld1q_u16(S0), v_row1 = vld1q_u16(S1);
+                uint32x4_t v_dst = vaddq_u32(vaddl_u16(vget_low_u16(v_row0), vget_high_u16(v_row0)),
+                                             vaddl_u16(vget_low_u16(v_row1), vget_high_u16(v_row1)));
+                vst1_u16(D, vmovn_u32(vshrq_n_u32(vaddq_u32(v_dst, v_2), 2)));
+            }
+        }
+
+        return dx;
+    }
+
+private:
+    int cn, step;
+};
+
+#elif CV_SSE2
+
 class ResizeAreaFastVec_SIMD_8u
 {
 public:
@@ -1608,10 +1898,10 @@ public:
                 continue;
             }
 
-            dx = vop((const T*)(src.data + src.step * sy0), D, w);
+            dx = vop(src.template ptr<T>(sy0), D, w);
             for( ; dx < w; dx++ )
             {
-                const T* S = (const T*)(src.data + src.step * sy0) + xofs[dx];
+                const T* S = src.template ptr<T>(sy0) + xofs[dx];
                 WT sum = 0;
                 k = 0;
                 #if CV_ENABLE_UNROLLED
@@ -1635,7 +1925,7 @@ public:
                 {
                     if( sy0 + sy >= ssize.height )
                         break;
-                    const T* S = (const T*)(src.data + src.step*(sy0 + sy)) + sx0;
+                    const T* S = src.template ptr<T>(sy0 + sy) + sx0;
                     for( int sx = 0; sx < scale_x*cn; sx += cn )
                     {
                         if( sx0 + sx >= ssize.width )
@@ -1713,7 +2003,7 @@ public:
             int sy = ytab[j].si;
 
             {
-                const T* S = (const T*)(src->data + src->step*sy);
+                const T* S = src->template ptr<T>(sy);
                 for( dx = 0; dx < dsize.width; dx++ )
                     buf[dx] = (WT)0;
 
@@ -1775,7 +2065,7 @@ public:
 
             if( dy != prev_dy )
             {
-                T* D = (T*)(dst->data + dst->step*prev_dy);
+                T* D = dst->template ptr<T>(prev_dy);
 
                 for( dx = 0; dx < dsize.width; dx++ )
                 {
@@ -1792,7 +2082,7 @@ public:
         }
 
         {
-        T* D = (T*)(dst->data + dst->step*prev_dy);
+        T* D = dst->template ptr<T>(prev_dy);
         for( dx = 0; dx < dsize.width; dx++ )
             D[dx] = saturate_cast<T>(sum[dx]);
         }
@@ -1973,14 +2263,18 @@ public:
         CHECK_IPP_STATUS(getBufferSizeFunc(pSpec, dstSize, cn, &bufsize));
         CHECK_IPP_STATUS(getSrcOffsetFunc(pSpec, dstOffset, &srcOffset));
 
-        const Ipp8u* pSrc = (const Ipp8u*)src.data + (int)src.step[0] * srcOffset.y + srcOffset.x * cn * itemSize;
-        Ipp8u* pDst = (Ipp8u*)dst.data + (int)dst.step[0] * dstOffset.y + dstOffset.x * cn * itemSize;
+        const Ipp8u* pSrc = src.ptr<Ipp8u>(srcOffset.y) + srcOffset.x * cn * itemSize;
+        Ipp8u* pDst = dst.ptr<Ipp8u>(dstOffset.y) + dstOffset.x * cn * itemSize;
 
         AutoBuffer<uchar> buf(bufsize + 64);
         uchar* bufptr = alignPtr((uchar*)buf, 32);
 
         if( func( pSrc, (int)src.step[0], pDst, (int)dst.step[0], dstOffset, dstSize, ippBorderRepl, 0, pSpec, bufptr ) < 0 )
             *ok = false;
+        else
+        {
+            CV_IMPL_ADD(CV_IMPL_IPP|CV_IMPL_MT);
+        }
     }
 private:
     const Mat & src;
@@ -2074,7 +2368,8 @@ static bool ocl_resize( InputArray _src, OutputArray _dst, Size dsize,
     // datatypes because the observed error is low.
     bool useSampler = (interpolation == INTER_LINEAR && ocl::Device::getDefault().imageSupport() &&
                        ocl::Image2D::canCreateAlias(src) && depth <= 4 &&
-                       ocl::Image2D::isFormatSupported(depth, cn, true));
+                       ocl::Image2D::isFormatSupported(depth, cn, true) &&
+                       src.offset==0);
     if (useSampler)
     {
         int wdepth = std::max(depth, CV_32S);
@@ -2179,7 +2474,7 @@ static bool ocl_resize( InputArray _src, OutputArray _dst, Size dsize,
     {
         k.create("resizeNN", ocl::imgproc::resize_oclsrc,
                  format("-D INTER_NEAREST -D T=%s -D T1=%s -D cn=%d",
-                        ocl::memopTypeToStr(type), ocl::memopTypeToStr(depth), cn));
+                        ocl::vecopTypeToStr(type), ocl::vecopTypeToStr(depth), cn));
         if (k.empty())
             return false;
 
@@ -2380,7 +2675,7 @@ void cv::resize( InputArray _src, OutputArray _dst, Size dsize,
         inv_scale_y = (double)dsize.height/ssize.height;
     }
 
-    CV_OCL_RUN(_src.dims() <= 2 && _dst.isUMat(),
+    CV_OCL_RUN(_src.dims() <= 2 && _dst.isUMat() && _src.cols() > 10 && _src.rows() > 10,
                ocl_resize(_src, _dst, dsize, inv_scale_x, inv_scale_y, interpolation))
 
     Mat src = _src.getMat();
@@ -2403,35 +2698,41 @@ void cv::resize( InputArray _src, OutputArray _dst, Size dsize,
             std::abs(scale_y - iscale_y) < DBL_EPSILON;
 
 #if IPP_VERSION_X100 >= 701
+    CV_IPP_CHECK()
+    {
 #define IPP_RESIZE_EPS 1e-10
 
-    double ex = fabs((double)dsize.width / src.cols  - inv_scale_x) / inv_scale_x;
-    double ey = fabs((double)dsize.height / src.rows - inv_scale_y) / inv_scale_y;
+        double ex = fabs((double)dsize.width / src.cols  - inv_scale_x) / inv_scale_x;
+        double ey = fabs((double)dsize.height / src.rows - inv_scale_y) / inv_scale_y;
 
-    if ( ((ex < IPP_RESIZE_EPS && ey < IPP_RESIZE_EPS && depth != CV_64F) || (ex == 0 && ey == 0 && depth == CV_64F)) &&
-         (interpolation == INTER_LINEAR || interpolation == INTER_CUBIC) &&
-         !(interpolation == INTER_LINEAR && is_area_fast && iscale_x == 2 && iscale_y == 2 && depth == CV_8U))
-    {
-        int mode = -1;
-        if (interpolation == INTER_LINEAR && src.rows >= 2 && src.cols >= 2)
-            mode = ippLinear;
-        else if (interpolation == INTER_CUBIC && src.rows >= 4 && src.cols >= 4)
-            mode = ippCubic;
-
-        if( mode >= 0 && (cn == 1 || cn == 3 || cn == 4) &&
-            (depth == CV_16U || depth == CV_16S || depth == CV_32F ||
-            (depth == CV_64F && mode == ippLinear)))
+        if ( ((ex < IPP_RESIZE_EPS && ey < IPP_RESIZE_EPS && depth != CV_64F) || (ex == 0 && ey == 0 && depth == CV_64F)) &&
+             (interpolation == INTER_LINEAR || interpolation == INTER_CUBIC) &&
+             !(interpolation == INTER_LINEAR && is_area_fast && iscale_x == 2 && iscale_y == 2 && depth == CV_8U))
         {
-            bool ok = true;
-            Range range(0, src.rows);
-            IPPresizeInvoker invoker(src, dst, inv_scale_x, inv_scale_y, mode, &ok);
-            parallel_for_(range, invoker, dst.total()/(double)(1<<16));
-            if( ok )
-                return;
-            setIppErrorStatus();
+            int mode = -1;
+            if (interpolation == INTER_LINEAR && src.rows >= 2 && src.cols >= 2)
+                mode = ippLinear;
+            else if (interpolation == INTER_CUBIC && src.rows >= 4 && src.cols >= 4)
+                mode = ippCubic;
+
+            if( mode >= 0 && (cn == 1 || cn == 3 || cn == 4) &&
+                (depth == CV_16U || depth == CV_16S || depth == CV_32F ||
+                (depth == CV_64F && mode == ippLinear)))
+            {
+                bool ok = true;
+                Range range(0, src.rows);
+                IPPresizeInvoker invoker(src, dst, inv_scale_x, inv_scale_y, mode, &ok);
+                parallel_for_(range, invoker, dst.total()/(double)(1<<16));
+                if( ok )
+                {
+                    CV_IMPL_ADD(CV_IMPL_IPP|CV_IMPL_MT);
+                    return;
+                }
+                setIppErrorStatus();
+            }
         }
-    }
 #undef IPP_RESIZE_EPS
+    }
 #endif
 
     if( interpolation == INTER_NEAREST )
@@ -2642,7 +2943,7 @@ static void remapNearest( const Mat& _src, Mat& _dst, const Mat& _xy,
 {
     Size ssize = _src.size(), dsize = _dst.size();
     int cn = _src.channels();
-    const T* S0 = (const T*)_src.data;
+    const T* S0 = _src.ptr<T>();
     size_t sstep = _src.step/sizeof(S0[0]);
     Scalar_<T> cval(saturate_cast<T>(_borderValue[0]),
         saturate_cast<T>(_borderValue[1]),
@@ -2660,8 +2961,8 @@ static void remapNearest( const Mat& _src, Mat& _dst, const Mat& _xy,
 
     for( dy = 0; dy < dsize.height; dy++ )
     {
-        T* D = (T*)(_dst.data + _dst.step*dy);
-        const short* XY = (const short*)(_xy.data + _xy.step*dy);
+        T* D = _dst.ptr<T>(dy);
+        const short* XY = _xy.ptr<short>(dy);
 
         if( cn == 1 )
         {
@@ -2758,7 +3059,7 @@ struct RemapVec_8u
             sstep > 0x8000 )
             return 0;
 
-        const uchar *S0 = _src.data, *S1 = _src.data + _src.step;
+        const uchar *S0 = _src.ptr(), *S1 = _src.ptr(1);
         const short* wtab = cn == 1 ? (const short*)_wtab : &BilinearTab_iC4[0][0][0];
         uchar* D = (uchar*)_dst;
         __m128i delta = _mm_set1_epi32(INTER_REMAP_COEF_SCALE/2);
@@ -2962,7 +3263,7 @@ static void remapBilinear( const Mat& _src, Mat& _dst, const Mat& _xy,
     Size ssize = _src.size(), dsize = _dst.size();
     int cn = _src.channels();
     const AT* wtab = (const AT*)_wtab;
-    const T* S0 = (const T*)_src.data;
+    const T* S0 = _src.ptr<T>();
     size_t sstep = _src.step/sizeof(S0[0]);
     Scalar_<T> cval(saturate_cast<T>(_borderValue[0]),
         saturate_cast<T>(_borderValue[1]),
@@ -2981,9 +3282,9 @@ static void remapBilinear( const Mat& _src, Mat& _dst, const Mat& _xy,
 
     for( dy = 0; dy < dsize.height; dy++ )
     {
-        T* D = (T*)(_dst.data + _dst.step*dy);
-        const short* XY = (const short*)(_xy.data + _xy.step*dy);
-        const ushort* FXY = (const ushort*)(_fxy.data + _fxy.step*dy);
+        T* D = _dst.ptr<T>(dy);
+        const short* XY = _xy.ptr<short>(dy);
+        const ushort* FXY = _fxy.ptr<ushort>(dy);
         int X0 = 0;
         bool prevInlier = false;
 
@@ -3162,7 +3463,7 @@ static void remapBicubic( const Mat& _src, Mat& _dst, const Mat& _xy,
     Size ssize = _src.size(), dsize = _dst.size();
     int cn = _src.channels();
     const AT* wtab = (const AT*)_wtab;
-    const T* S0 = (const T*)_src.data;
+    const T* S0 = _src.ptr<T>();
     size_t sstep = _src.step/sizeof(S0[0]);
     Scalar_<T> cval(saturate_cast<T>(_borderValue[0]),
         saturate_cast<T>(_borderValue[1]),
@@ -3182,9 +3483,9 @@ static void remapBicubic( const Mat& _src, Mat& _dst, const Mat& _xy,
 
     for( dy = 0; dy < dsize.height; dy++ )
     {
-        T* D = (T*)(_dst.data + _dst.step*dy);
-        const short* XY = (const short*)(_xy.data + _xy.step*dy);
-        const ushort* FXY = (const ushort*)(_fxy.data + _fxy.step*dy);
+        T* D = _dst.ptr<T>(dy);
+        const short* XY = _xy.ptr<short>(dy);
+        const ushort* FXY = _fxy.ptr<ushort>(dy);
 
         for( dx = 0; dx < dsize.width; dx++, D += cn )
         {
@@ -3267,7 +3568,7 @@ static void remapLanczos4( const Mat& _src, Mat& _dst, const Mat& _xy,
     Size ssize = _src.size(), dsize = _dst.size();
     int cn = _src.channels();
     const AT* wtab = (const AT*)_wtab;
-    const T* S0 = (const T*)_src.data;
+    const T* S0 = _src.ptr<T>();
     size_t sstep = _src.step/sizeof(S0[0]);
     Scalar_<T> cval(saturate_cast<T>(_borderValue[0]),
         saturate_cast<T>(_borderValue[1]),
@@ -3287,9 +3588,9 @@ static void remapLanczos4( const Mat& _src, Mat& _dst, const Mat& _xy,
 
     for( dy = 0; dy < dsize.height; dy++ )
     {
-        T* D = (T*)(_dst.data + _dst.step*dy);
-        const short* XY = (const short*)(_xy.data + _xy.step*dy);
-        const ushort* FXY = (const ushort*)(_fxy.data + _fxy.step*dy);
+        T* D = _dst.ptr<T>(dy);
+        const short* XY = _xy.ptr<short>(dy);
+        const ushort* FXY = _fxy.ptr<ushort>(dy);
 
         for( dx = 0; dx < dsize.width; dx++, D += cn )
         {
@@ -3414,15 +3715,15 @@ public:
 
                 if( nnfunc )
                 {
-                    if( m1->type() == CV_16SC2 && !m2->data ) // the data is already in the right format
+                    if( m1->type() == CV_16SC2 && m2->empty() ) // the data is already in the right format
                         bufxy = (*m1)(Rect(x, y, bcols, brows));
                     else if( map_depth != CV_32F )
                     {
                         for( y1 = 0; y1 < brows; y1++ )
                         {
-                            short* XY = (short*)(bufxy.data + bufxy.step*y1);
-                            const short* sXY = (const short*)(m1->data + m1->step*(y+y1)) + x*2;
-                            const ushort* sA = (const ushort*)(m2->data + m2->step*(y+y1)) + x;
+                            short* XY = bufxy.ptr<short>(y1);
+                            const short* sXY = m1->ptr<short>(y+y1) + x*2;
+                            const ushort* sA = m2->ptr<ushort>(y+y1) + x;
 
                             for( x1 = 0; x1 < bcols; x1++ )
                             {
@@ -3438,9 +3739,9 @@ public:
                     {
                         for( y1 = 0; y1 < brows; y1++ )
                         {
-                            short* XY = (short*)(bufxy.data + bufxy.step*y1);
-                            const float* sX = (const float*)(m1->data + m1->step*(y+y1)) + x;
-                            const float* sY = (const float*)(m2->data + m2->step*(y+y1)) + x;
+                            short* XY = bufxy.ptr<short>(y1);
+                            const float* sX = m1->ptr<float>(y+y1) + x;
+                            const float* sY = m2->ptr<float>(y+y1) + x;
                             x1 = 0;
 
                         #if CV_SSE2
@@ -3480,21 +3781,29 @@ public:
                 Mat bufa(_bufa, Rect(0, 0, bcols, brows));
                 for( y1 = 0; y1 < brows; y1++ )
                 {
-                    short* XY = (short*)(bufxy.data + bufxy.step*y1);
-                    ushort* A = (ushort*)(bufa.data + bufa.step*y1);
+                    short* XY = bufxy.ptr<short>(y1);
+                    ushort* A = bufa.ptr<ushort>(y1);
 
                     if( m1->type() == CV_16SC2 && (m2->type() == CV_16UC1 || m2->type() == CV_16SC1) )
                     {
                         bufxy = (*m1)(Rect(x, y, bcols, brows));
 
-                        const ushort* sA = (const ushort*)(m2->data + m2->step*(y+y1)) + x;
-                        for( x1 = 0; x1 < bcols; x1++ )
+                        const ushort* sA = m2->ptr<ushort>(y+y1) + x;
+                        x1 = 0;
+
+                    #if CV_NEON
+                        uint16x8_t v_scale = vdupq_n_u16(INTER_TAB_SIZE2-1);
+                        for ( ; x1 <= bcols - 8; x1 += 8)
+                            vst1q_u16(A + x1, vandq_u16(vld1q_u16(sA + x1), v_scale));
+                    #endif
+
+                        for( ; x1 < bcols; x1++ )
                             A[x1] = (ushort)(sA[x1] & (INTER_TAB_SIZE2-1));
                     }
                     else if( planar_input )
                     {
-                        const float* sX = (const float*)(m1->data + m1->step*(y+y1)) + x;
-                        const float* sY = (const float*)(m2->data + m2->step*(y+y1)) + x;
+                        const float* sX = m1->ptr<float>(y+y1) + x;
+                        const float* sY = m2->ptr<float>(y+y1) + x;
 
                         x1 = 0;
                     #if CV_SSE2
@@ -3533,6 +3842,22 @@ public:
                                 _mm_storeu_si128((__m128i*)(XY + x1*2 + 8), iy1);
                             }
                         }
+                    #elif CV_NEON
+                        float32x4_t v_scale = vdupq_n_f32((float)INTER_TAB_SIZE);
+                        int32x4_t v_scale2 = vdupq_n_s32(INTER_TAB_SIZE - 1), v_scale3 = vdupq_n_s32(INTER_TAB_SIZE);
+
+                        for( ; x1 <= bcols - 4; x1 += 4 )
+                        {
+                            int32x4_t v_sx = cv_vrndq_s32_f32(vmulq_f32(vld1q_f32(sX + x1), v_scale)),
+                                      v_sy = cv_vrndq_s32_f32(vmulq_f32(vld1q_f32(sY + x1), v_scale));
+                            int32x4_t v_v = vmlaq_s32(vandq_s32(v_sx, v_scale2), v_scale3,
+                                                      vandq_s32(v_sy, v_scale2));
+                            vst1_u16(A + x1, vqmovun_s32(v_v));
+
+                            int16x4x2_t v_dst = vzip_s16(vqmovn_s32(vshrq_n_s32(v_sx, INTER_BITS)),
+                                                         vqmovn_s32(vshrq_n_s32(v_sy, INTER_BITS)));
+                            vst1q_s16(XY + (x1 << 1), vcombine_s16(v_dst.val[0], v_dst.val[1]));
+                        }
                     #endif
 
                         for( ; x1 < bcols; x1++ )
@@ -3547,7 +3872,27 @@ public:
                     }
                     else
                     {
-                        const float* sXY = (const float*)(m1->data + m1->step*(y+y1)) + x*2;
+                        const float* sXY = m1->ptr<float>(y+y1) + x*2;
+                        x1 = 0;
+
+                    #if CV_NEON
+                        float32x4_t v_scale = vdupq_n_f32(INTER_TAB_SIZE);
+                        int32x4_t v_scale2 = vdupq_n_s32(INTER_TAB_SIZE-1), v_scale3 = vdupq_n_s32(INTER_TAB_SIZE);
+
+                        for( ; x1 <= bcols - 4; x1 += 4 )
+                        {
+                            float32x4x2_t v_src = vld2q_f32(sXY + (x1 << 1));
+                            int32x4_t v_sx = cv_vrndq_s32_f32(vmulq_f32(v_src.val[0], v_scale));
+                            int32x4_t v_sy = cv_vrndq_s32_f32(vmulq_f32(v_src.val[1], v_scale));
+                            int32x4_t v_v = vmlaq_s32(vandq_s32(v_sx, v_scale2), v_scale3,
+                                                      vandq_s32(v_sy, v_scale2));
+                            vst1_u16(A + x1, vqmovun_s32(v_v));
+
+                            int16x4x2_t v_dst = vzip_s16(vqmovn_s32(vshrq_n_s32(v_sx, INTER_BITS)),
+                                                         vqmovn_s32(vshrq_n_s32(v_sy, INTER_BITS)));
+                            vst1q_s16(XY + (x1 << 1), vcombine_s16(v_dst.val[0], v_dst.val[1]));
+                        }
+                    #endif
 
                         for( x1 = 0; x1 < bcols; x1++ )
                         {
@@ -3582,7 +3927,9 @@ private:
 static bool ocl_remap(InputArray _src, OutputArray _dst, InputArray _map1, InputArray _map2,
                       int interpolation, int borderType, const Scalar& borderValue)
 {
-    int cn = _src.channels(), type = _src.type(), depth = _src.depth();
+    const ocl::Device & dev = ocl::Device::getDefault();
+    int cn = _src.channels(), type = _src.type(), depth = _src.depth(),
+            rowsPerWI = dev.isIntel() ? 4 : 1;
 
     if (borderType == BORDER_TRANSPARENT || !(interpolation == INTER_LINEAR || interpolation == INTER_NEAREST)
             || _map1.type() == CV_16SC1 || _map2.type() == CV_16SC1)
@@ -3619,12 +3966,14 @@ static bool ocl_remap(InputArray _src, OutputArray _dst, InputArray _map1, Input
     static const char * const interMap[] = { "INTER_NEAREST", "INTER_LINEAR", "INTER_CUBIC", "INTER_LINEAR", "INTER_LANCZOS" };
     static const char * const borderMap[] = { "BORDER_CONSTANT", "BORDER_REPLICATE", "BORDER_REFLECT", "BORDER_WRAP",
                            "BORDER_REFLECT_101", "BORDER_TRANSPARENT" };
-    String buildOptions = format("-D %s -D %s -D T=%s", interMap[interpolation], borderMap[borderType], ocl::typeToStr(type));
+    String buildOptions = format("-D %s -D %s -D T=%s -D rowsPerWI=%d",
+                                 interMap[interpolation], borderMap[borderType],
+                                 ocl::typeToStr(type), rowsPerWI);
 
     if (interpolation != INTER_NEAREST)
     {
         char cvt[3][40];
-        int wdepth = std::max(CV_32F, dst.depth());
+        int wdepth = std::max(CV_32F, depth);
         buildOptions = buildOptions
                       + format(" -D WT=%s -D convertToT=%s -D convertToWT=%s"
                                " -D convertToWT2=%s -D WT2=%s",
@@ -3636,24 +3985,23 @@ static bool ocl_remap(InputArray _src, OutputArray _dst, InputArray _map1, Input
     }
     int scalarcn = cn == 3 ? 4 : cn;
     int sctype = CV_MAKETYPE(depth, scalarcn);
-    buildOptions += format(" -D T=%s -D T1=%s"
-                           " -D cn=%d -D ST=%s",
+    buildOptions += format(" -D T=%s -D T1=%s -D cn=%d -D ST=%s -D depth=%d",
                            ocl::typeToStr(type), ocl::typeToStr(depth),
-                           cn, ocl::typeToStr(sctype));
+                           cn, ocl::typeToStr(sctype), depth);
 
     ocl::Kernel k(kernelName.c_str(), ocl::imgproc::remap_oclsrc, buildOptions);
 
     Mat scalar(1, 1, sctype, borderValue);
     ocl::KernelArg srcarg = ocl::KernelArg::ReadOnly(src), dstarg = ocl::KernelArg::WriteOnly(dst),
             map1arg = ocl::KernelArg::ReadOnlyNoSize(map1),
-            scalararg = ocl::KernelArg::Constant((void*)scalar.data, scalar.elemSize());
+            scalararg = ocl::KernelArg::Constant((void*)scalar.ptr(), scalar.elemSize());
 
     if (map2.empty())
         k.args(srcarg, dstarg, map1arg, scalararg);
     else
         k.args(srcarg, dstarg, map1arg, ocl::KernelArg::ReadOnlyNoSize(map2), scalararg);
 
-    size_t globalThreads[2] = { dst.cols, dst.rows };
+    size_t globalThreads[2] = { dst.cols, (dst.rows + rowsPerWI - 1) / rowsPerWI };
     return k.run(2, globalThreads, NULL, false);
 }
 
@@ -3685,16 +4033,20 @@ public:
         int type = dst.type(), depth = CV_MAT_DEPTH(type), cn = CV_MAT_CN(type);
 
         if (borderType == BORDER_CONSTANT &&
-                !IPPSet(borderValue, dstRoi.data, (int)dstRoi.step, dstRoiSize, cn, depth))
+                !IPPSet(borderValue, dstRoi.ptr(), (int)dstRoi.step, dstRoiSize, cn, depth))
         {
             *ok = false;
             return;
         }
 
-        if (ippFunc(src.data, ippiSize(src.size()), (int)src.step, srcRoiRect,
-                    (const Ipp32f *)map1.data, (int)map1.step, (const Ipp32f *)map2.data, (int)map2.step,
-                    dstRoi.data, (int)dstRoi.step, dstRoiSize, ippInterpolation) < 0)
+        if (ippFunc(src.ptr(), ippiSize(src.size()), (int)src.step, srcRoiRect,
+                    map1.ptr<Ipp32f>(), (int)map1.step, map2.ptr<Ipp32f>(), (int)map2.step,
+                    dstRoi.ptr(), (int)dstRoi.step, dstRoiSize, ippInterpolation) < 0)
             *ok = false;
+        else
+        {
+            CV_IMPL_ADD(CV_IMPL_IPP|CV_IMPL_MT);
+        }
     }
 
 private:
@@ -3764,36 +4116,42 @@ void cv::remap( InputArray _src, OutputArray _dst,
     int type = src.type(), depth = CV_MAT_DEPTH(type);
 
 #if IPP_VERSION_X100 >= 0 && !defined HAVE_IPP_ICV_ONLY && 0
-    if ((interpolation == INTER_LINEAR || interpolation == INTER_CUBIC || interpolation == INTER_NEAREST) &&
-            map1.type() == CV_32FC1 && map2.type() == CV_32FC1 &&
-            (borderType == BORDER_CONSTANT || borderType == BORDER_TRANSPARENT))
+    CV_IPP_CHECK()
     {
-        int ippInterpolation =
-            interpolation == INTER_NEAREST ? IPPI_INTER_NN :
-            interpolation == INTER_LINEAR ? IPPI_INTER_LINEAR : IPPI_INTER_CUBIC;
-
-        ippiRemap ippFunc =
-            type == CV_8UC1 ? (ippiRemap)ippiRemap_8u_C1R :
-            type == CV_8UC3 ? (ippiRemap)ippiRemap_8u_C3R :
-            type == CV_8UC4 ? (ippiRemap)ippiRemap_8u_C4R :
-            type == CV_16UC1 ? (ippiRemap)ippiRemap_16u_C1R :
-            type == CV_16UC3 ? (ippiRemap)ippiRemap_16u_C3R :
-            type == CV_16UC4 ? (ippiRemap)ippiRemap_16u_C4R :
-            type == CV_32FC1 ? (ippiRemap)ippiRemap_32f_C1R :
-            type == CV_32FC3 ? (ippiRemap)ippiRemap_32f_C3R :
-            type == CV_32FC4 ? (ippiRemap)ippiRemap_32f_C4R : 0;
-
-        if (ippFunc)
+        if ((interpolation == INTER_LINEAR || interpolation == INTER_CUBIC || interpolation == INTER_NEAREST) &&
+                map1.type() == CV_32FC1 && map2.type() == CV_32FC1 &&
+                (borderType == BORDER_CONSTANT || borderType == BORDER_TRANSPARENT))
         {
-            bool ok;
-            IPPRemapInvoker invoker(src, dst, map1, map2, ippFunc, ippInterpolation,
-                                    borderType, borderValue, &ok);
-            Range range(0, dst.rows);
-            parallel_for_(range, invoker, dst.total() / (double)(1 << 16));
+            int ippInterpolation =
+                interpolation == INTER_NEAREST ? IPPI_INTER_NN :
+                interpolation == INTER_LINEAR ? IPPI_INTER_LINEAR : IPPI_INTER_CUBIC;
 
-            if (ok)
-                return;
-            setIppErrorStatus();
+            ippiRemap ippFunc =
+                type == CV_8UC1 ? (ippiRemap)ippiRemap_8u_C1R :
+                type == CV_8UC3 ? (ippiRemap)ippiRemap_8u_C3R :
+                type == CV_8UC4 ? (ippiRemap)ippiRemap_8u_C4R :
+                type == CV_16UC1 ? (ippiRemap)ippiRemap_16u_C1R :
+                type == CV_16UC3 ? (ippiRemap)ippiRemap_16u_C3R :
+                type == CV_16UC4 ? (ippiRemap)ippiRemap_16u_C4R :
+                type == CV_32FC1 ? (ippiRemap)ippiRemap_32f_C1R :
+                type == CV_32FC3 ? (ippiRemap)ippiRemap_32f_C3R :
+                type == CV_32FC4 ? (ippiRemap)ippiRemap_32f_C4R : 0;
+
+            if (ippFunc)
+            {
+                bool ok;
+                IPPRemapInvoker invoker(src, dst, map1, map2, ippFunc, ippInterpolation,
+                                        borderType, borderValue, &ok);
+                Range range(0, dst.rows);
+                parallel_for_(range, invoker, dst.total() / (double)(1 << 16));
+
+                if (ok)
+                {
+                    CV_IMPL_ADD(CV_IMPL_IPP|CV_IMPL_MT);
+                    return;
+                }
+                setIppErrorStatus();
+            }
         }
     }
 #endif
@@ -3825,15 +4183,15 @@ void cv::remap( InputArray _src, OutputArray _dst,
 
     const Mat *m1 = &map1, *m2 = &map2;
 
-    if( (map1.type() == CV_16SC2 && (map2.type() == CV_16UC1 || map2.type() == CV_16SC1 || !map2.data)) ||
-        (map2.type() == CV_16SC2 && (map1.type() == CV_16UC1 || map1.type() == CV_16SC1 || !map1.data)) )
+    if( (map1.type() == CV_16SC2 && (map2.type() == CV_16UC1 || map2.type() == CV_16SC1 || map2.empty())) ||
+        (map2.type() == CV_16SC2 && (map1.type() == CV_16UC1 || map1.type() == CV_16SC1 || map1.empty())) )
     {
         if( map1.type() != CV_16SC2 )
             std::swap(m1, m2);
     }
     else
     {
-        CV_Assert( ((map1.type() == CV_32FC2 || map1.type() == CV_16SC2) && !map2.data) ||
+        CV_Assert( ((map1.type() == CV_32FC2 || map1.type() == CV_16SC2) && map2.empty()) ||
             (map1.type() == CV_32FC1 && map2.type() == CV_32FC1) );
         planar_input = map1.channels() == 1;
     }
@@ -3857,7 +4215,7 @@ void cv::convertMaps( InputArray _map1, InputArray _map2,
     CV_Assert( (m1type == CV_16SC2 && (nninterpolate || m2type == CV_16UC1 || m2type == CV_16SC1)) ||
                (m2type == CV_16SC2 && (nninterpolate || m1type == CV_16UC1 || m1type == CV_16SC1)) ||
                (m1type == CV_32FC1 && m2type == CV_32FC1) ||
-               (m1type == CV_32FC2 && !m2->data) );
+               (m1type == CV_32FC2 && m2->empty()) );
 
     if( m2type == CV_16SC2 )
     {
@@ -3884,7 +4242,7 @@ void cv::convertMaps( InputArray _map1, InputArray _map2,
         (m1type == CV_32FC2 && dstm1type == CV_16SC2))) )
     {
         m1->convertTo( dstmap1, dstmap1.type() );
-        if( dstmap2.data && dstmap2.type() == m2->type() )
+        if( !dstmap2.empty() && dstmap2.type() == m2->type() )
             m2->copyTo( dstmap2 );
         return;
     }
@@ -3903,8 +4261,8 @@ void cv::convertMaps( InputArray _map1, InputArray _map2,
         return;
     }
 
-    if( m1->isContinuous() && (!m2->data || m2->isContinuous()) &&
-        dstmap1.isContinuous() && (!dstmap2.data || dstmap2.isContinuous()) )
+    if( m1->isContinuous() && (m2->empty() || m2->isContinuous()) &&
+        dstmap1.isContinuous() && (dstmap2.empty() || dstmap2.isContinuous()) )
     {
         size.width *= size.height;
         size.height = 1;
@@ -3914,13 +4272,13 @@ void cv::convertMaps( InputArray _map1, InputArray _map2,
     int x, y;
     for( y = 0; y < size.height; y++ )
     {
-        const float* src1f = (const float*)(m1->data + m1->step*y);
-        const float* src2f = (const float*)(m2->data + m2->step*y);
+        const float* src1f = m1->ptr<float>(y);
+        const float* src2f = m2->ptr<float>(y);
         const short* src1 = (const short*)src1f;
         const ushort* src2 = (const ushort*)src2f;
 
-        float* dst1f = (float*)(dstmap1.data + dstmap1.step*y);
-        float* dst2f = (float*)(dstmap2.data + dstmap2.step*y);
+        float* dst1f = dstmap1.ptr<float>(y);
+        float* dst2f = dstmap2.ptr<float>(y);
         short* dst1 = (short*)dst1f;
         ushort* dst2 = (ushort*)dst2f;
 
@@ -4131,7 +4489,7 @@ public:
         if( borderType == BORDER_CONSTANT )
         {
             IppiSize setSize = { dst.cols, range.end - range.start };
-            void *dataPointer = dst.data + dst.step[0] * range.start;
+            void *dataPointer = dst.ptr(range.start);
             if( !IPPSet( borderValue, dataPointer, (int)dst.step[0], setSize, cnn, src.depth() ) )
             {
                 *ok = false;
@@ -4140,10 +4498,14 @@ public:
         }
 
         // Aug 2013: problem in IPP 7.1, 8.0 : sometimes function return ippStsCoeffErr
-        IppStatus status = func( src.data, srcsize, (int)src.step[0], srcroi, dst.data,
+        IppStatus status = func( src.ptr(), srcsize, (int)src.step[0], srcroi, dst.ptr(),
                                 (int)dst.step[0], dstroi, coeffs, mode );
         if( status < 0)
             *ok = false;
+        else
+        {
+            CV_IMPL_ADD(CV_IMPL_IPP|CV_IMPL_MT);
+        }
     }
 private:
     Mat &src;
@@ -4311,60 +4673,66 @@ void cv::warpAffine( InputArray _src, OutputArray _dst,
     const int AB_SCALE = 1 << AB_BITS;
 
 #if defined (HAVE_IPP) && IPP_VERSION_MAJOR * 100 + IPP_VERSION_MINOR >= 801 && 0
-    int type = src.type(), depth = CV_MAT_DEPTH(type), cn = CV_MAT_CN(type);
-    if( ( depth == CV_8U || depth == CV_16U || depth == CV_32F ) &&
-       ( cn == 1 || cn == 3 || cn == 4 ) &&
-       ( interpolation == INTER_NEAREST || interpolation == INTER_LINEAR || interpolation == INTER_CUBIC) &&
-       ( borderType == cv::BORDER_TRANSPARENT || borderType == cv::BORDER_CONSTANT) )
+    CV_IPP_CHECK()
     {
-        ippiWarpAffineBackFunc ippFunc = 0;
-        if ((flags & WARP_INVERSE_MAP) != 0)
+        int type = src.type(), depth = CV_MAT_DEPTH(type), cn = CV_MAT_CN(type);
+        if( ( depth == CV_8U || depth == CV_16U || depth == CV_32F ) &&
+           ( cn == 1 || cn == 3 || cn == 4 ) &&
+           ( interpolation == INTER_NEAREST || interpolation == INTER_LINEAR || interpolation == INTER_CUBIC) &&
+           ( borderType == cv::BORDER_TRANSPARENT || borderType == cv::BORDER_CONSTANT) )
         {
-            ippFunc =
-            type == CV_8UC1 ? (ippiWarpAffineBackFunc)ippiWarpAffineBack_8u_C1R :
-            type == CV_8UC3 ? (ippiWarpAffineBackFunc)ippiWarpAffineBack_8u_C3R :
-            type == CV_8UC4 ? (ippiWarpAffineBackFunc)ippiWarpAffineBack_8u_C4R :
-            type == CV_16UC1 ? (ippiWarpAffineBackFunc)ippiWarpAffineBack_16u_C1R :
-            type == CV_16UC3 ? (ippiWarpAffineBackFunc)ippiWarpAffineBack_16u_C3R :
-            type == CV_16UC4 ? (ippiWarpAffineBackFunc)ippiWarpAffineBack_16u_C4R :
-            type == CV_32FC1 ? (ippiWarpAffineBackFunc)ippiWarpAffineBack_32f_C1R :
-            type == CV_32FC3 ? (ippiWarpAffineBackFunc)ippiWarpAffineBack_32f_C3R :
-            type == CV_32FC4 ? (ippiWarpAffineBackFunc)ippiWarpAffineBack_32f_C4R :
+            ippiWarpAffineBackFunc ippFunc = 0;
+            if ((flags & WARP_INVERSE_MAP) != 0)
+            {
+                ippFunc =
+                type == CV_8UC1 ? (ippiWarpAffineBackFunc)ippiWarpAffineBack_8u_C1R :
+                type == CV_8UC3 ? (ippiWarpAffineBackFunc)ippiWarpAffineBack_8u_C3R :
+                type == CV_8UC4 ? (ippiWarpAffineBackFunc)ippiWarpAffineBack_8u_C4R :
+                type == CV_16UC1 ? (ippiWarpAffineBackFunc)ippiWarpAffineBack_16u_C1R :
+                type == CV_16UC3 ? (ippiWarpAffineBackFunc)ippiWarpAffineBack_16u_C3R :
+                type == CV_16UC4 ? (ippiWarpAffineBackFunc)ippiWarpAffineBack_16u_C4R :
+                type == CV_32FC1 ? (ippiWarpAffineBackFunc)ippiWarpAffineBack_32f_C1R :
+                type == CV_32FC3 ? (ippiWarpAffineBackFunc)ippiWarpAffineBack_32f_C3R :
+                type == CV_32FC4 ? (ippiWarpAffineBackFunc)ippiWarpAffineBack_32f_C4R :
+                0;
+            }
+            else
+            {
+                ippFunc =
+                type == CV_8UC1 ? (ippiWarpAffineBackFunc)ippiWarpAffine_8u_C1R :
+                type == CV_8UC3 ? (ippiWarpAffineBackFunc)ippiWarpAffine_8u_C3R :
+                type == CV_8UC4 ? (ippiWarpAffineBackFunc)ippiWarpAffine_8u_C4R :
+                type == CV_16UC1 ? (ippiWarpAffineBackFunc)ippiWarpAffine_16u_C1R :
+                type == CV_16UC3 ? (ippiWarpAffineBackFunc)ippiWarpAffine_16u_C3R :
+                type == CV_16UC4 ? (ippiWarpAffineBackFunc)ippiWarpAffine_16u_C4R :
+                type == CV_32FC1 ? (ippiWarpAffineBackFunc)ippiWarpAffine_32f_C1R :
+                type == CV_32FC3 ? (ippiWarpAffineBackFunc)ippiWarpAffine_32f_C3R :
+                type == CV_32FC4 ? (ippiWarpAffineBackFunc)ippiWarpAffine_32f_C4R :
+                0;
+            }
+            int mode =
+            interpolation == INTER_LINEAR ? IPPI_INTER_LINEAR :
+            interpolation == INTER_NEAREST ? IPPI_INTER_NN :
+            interpolation == INTER_CUBIC ? IPPI_INTER_CUBIC :
             0;
-        }
-        else
-        {
-            ippFunc =
-            type == CV_8UC1 ? (ippiWarpAffineBackFunc)ippiWarpAffine_8u_C1R :
-            type == CV_8UC3 ? (ippiWarpAffineBackFunc)ippiWarpAffine_8u_C3R :
-            type == CV_8UC4 ? (ippiWarpAffineBackFunc)ippiWarpAffine_8u_C4R :
-            type == CV_16UC1 ? (ippiWarpAffineBackFunc)ippiWarpAffine_16u_C1R :
-            type == CV_16UC3 ? (ippiWarpAffineBackFunc)ippiWarpAffine_16u_C3R :
-            type == CV_16UC4 ? (ippiWarpAffineBackFunc)ippiWarpAffine_16u_C4R :
-            type == CV_32FC1 ? (ippiWarpAffineBackFunc)ippiWarpAffine_32f_C1R :
-            type == CV_32FC3 ? (ippiWarpAffineBackFunc)ippiWarpAffine_32f_C3R :
-            type == CV_32FC4 ? (ippiWarpAffineBackFunc)ippiWarpAffine_32f_C4R :
-            0;
-        }
-        int mode =
-        interpolation == INTER_LINEAR ? IPPI_INTER_LINEAR :
-        interpolation == INTER_NEAREST ? IPPI_INTER_NN :
-        interpolation == INTER_CUBIC ? IPPI_INTER_CUBIC :
-        0;
-        CV_Assert(mode && ippFunc);
+            CV_Assert(mode && ippFunc);
 
-        double coeffs[2][3];
-        for( int i = 0; i < 2; i++ )
-            for( int j = 0; j < 3; j++ )
-                coeffs[i][j] = matM.at<double>(i, j);
+            double coeffs[2][3];
+            for( int i = 0; i < 2; i++ )
+                for( int j = 0; j < 3; j++ )
+                    coeffs[i][j] = matM.at<double>(i, j);
 
-        bool ok;
-        Range range(0, dst.rows);
-        IPPWarpAffineInvoker invoker(src, dst, coeffs, mode, borderType, borderValue, ippFunc, &ok);
-        parallel_for_(range, invoker, dst.total()/(double)(1<<16));
-        if( ok )
-            return;
-        setIppErrorStatus();
+            bool ok;
+            Range range(0, dst.rows);
+            IPPWarpAffineInvoker invoker(src, dst, coeffs, mode, borderType, borderValue, ippFunc, &ok);
+            parallel_for_(range, invoker, dst.total()/(double)(1<<16));
+            if( ok )
+            {
+                CV_IMPL_ADD(CV_IMPL_IPP|CV_IMPL_MT);
+                return;
+            }
+            setIppErrorStatus();
+        }
     }
 #endif
 
@@ -4498,7 +4866,7 @@ public:
         if( borderType == BORDER_CONSTANT )
         {
             IppiSize setSize = {dst.cols, range.end - range.start};
-            void *dataPointer = dst.data + dst.step[0] * range.start;
+            void *dataPointer = dst.ptr(range.start);
             if( !IPPSet( borderValue, dataPointer, (int)dst.step[0], setSize, cnn, src.depth() ) )
             {
                 *ok = false;
@@ -4506,9 +4874,13 @@ public:
             }
         }
 
-        IppStatus status = func(src.data, srcsize, (int)src.step[0], srcroi, dst.data, (int)dst.step[0], dstroi, coeffs, mode);
+        IppStatus status = func(src.ptr(), srcsize, (int)src.step[0], srcroi, dst.ptr(), (int)dst.step[0], dstroi, coeffs, mode);
         if (status != ippStsNoErr)
             *ok = false;
+        else
+        {
+            CV_IMPL_ADD(CV_IMPL_IPP|CV_IMPL_MT);
+        }
     }
 private:
     Mat &src;
@@ -4557,55 +4929,61 @@ void cv::warpPerspective( InputArray _src, OutputArray _dst, InputArray _M0,
 
 
 #if defined (HAVE_IPP) && IPP_VERSION_MAJOR * 100 + IPP_VERSION_MINOR >= 801 && 0
-    int type = src.type(), depth = CV_MAT_DEPTH(type), cn = CV_MAT_CN(type);
-    if( (depth == CV_8U || depth == CV_16U || depth == CV_32F) &&
-       (cn == 1 || cn == 3 || cn == 4) &&
-       ( borderType == cv::BORDER_TRANSPARENT || borderType == cv::BORDER_CONSTANT ) &&
-       (interpolation == INTER_NEAREST || interpolation == INTER_LINEAR || interpolation == INTER_CUBIC))
+    CV_IPP_CHECK()
     {
-        ippiWarpPerspectiveFunc ippFunc = 0;
-        if ((flags & WARP_INVERSE_MAP) != 0)
+        int type = src.type(), depth = CV_MAT_DEPTH(type), cn = CV_MAT_CN(type);
+        if( (depth == CV_8U || depth == CV_16U || depth == CV_32F) &&
+           (cn == 1 || cn == 3 || cn == 4) &&
+           ( borderType == cv::BORDER_TRANSPARENT || borderType == cv::BORDER_CONSTANT ) &&
+           (interpolation == INTER_NEAREST || interpolation == INTER_LINEAR || interpolation == INTER_CUBIC))
         {
-            ippFunc = type == CV_8UC1 ? (ippiWarpPerspectiveFunc)ippiWarpPerspectiveBack_8u_C1R :
-            type == CV_8UC3 ? (ippiWarpPerspectiveFunc)ippiWarpPerspectiveBack_8u_C3R :
-            type == CV_8UC4 ? (ippiWarpPerspectiveFunc)ippiWarpPerspectiveBack_8u_C4R :
-            type == CV_16UC1 ? (ippiWarpPerspectiveFunc)ippiWarpPerspectiveBack_16u_C1R :
-            type == CV_16UC3 ? (ippiWarpPerspectiveFunc)ippiWarpPerspectiveBack_16u_C3R :
-            type == CV_16UC4 ? (ippiWarpPerspectiveFunc)ippiWarpPerspectiveBack_16u_C4R :
-            type == CV_32FC1 ? (ippiWarpPerspectiveFunc)ippiWarpPerspectiveBack_32f_C1R :
-            type == CV_32FC3 ? (ippiWarpPerspectiveFunc)ippiWarpPerspectiveBack_32f_C3R :
-            type == CV_32FC4 ? (ippiWarpPerspectiveFunc)ippiWarpPerspectiveBack_32f_C4R : 0;
-        }
-        else
-        {
-            ippFunc = type == CV_8UC1 ? (ippiWarpPerspectiveFunc)ippiWarpPerspective_8u_C1R :
-            type == CV_8UC3 ? (ippiWarpPerspectiveFunc)ippiWarpPerspective_8u_C3R :
-            type == CV_8UC4 ? (ippiWarpPerspectiveFunc)ippiWarpPerspective_8u_C4R :
-            type == CV_16UC1 ? (ippiWarpPerspectiveFunc)ippiWarpPerspective_16u_C1R :
-            type == CV_16UC3 ? (ippiWarpPerspectiveFunc)ippiWarpPerspective_16u_C3R :
-            type == CV_16UC4 ? (ippiWarpPerspectiveFunc)ippiWarpPerspective_16u_C4R :
-            type == CV_32FC1 ? (ippiWarpPerspectiveFunc)ippiWarpPerspective_32f_C1R :
-            type == CV_32FC3 ? (ippiWarpPerspectiveFunc)ippiWarpPerspective_32f_C3R :
-            type == CV_32FC4 ? (ippiWarpPerspectiveFunc)ippiWarpPerspective_32f_C4R : 0;
-        }
-        int mode =
-        interpolation == INTER_NEAREST ? IPPI_INTER_NN :
-        interpolation == INTER_LINEAR ? IPPI_INTER_LINEAR :
-        interpolation == INTER_CUBIC ? IPPI_INTER_CUBIC : 0;
-        CV_Assert(mode && ippFunc);
+            ippiWarpPerspectiveFunc ippFunc = 0;
+            if ((flags & WARP_INVERSE_MAP) != 0)
+            {
+                ippFunc = type == CV_8UC1 ? (ippiWarpPerspectiveFunc)ippiWarpPerspectiveBack_8u_C1R :
+                type == CV_8UC3 ? (ippiWarpPerspectiveFunc)ippiWarpPerspectiveBack_8u_C3R :
+                type == CV_8UC4 ? (ippiWarpPerspectiveFunc)ippiWarpPerspectiveBack_8u_C4R :
+                type == CV_16UC1 ? (ippiWarpPerspectiveFunc)ippiWarpPerspectiveBack_16u_C1R :
+                type == CV_16UC3 ? (ippiWarpPerspectiveFunc)ippiWarpPerspectiveBack_16u_C3R :
+                type == CV_16UC4 ? (ippiWarpPerspectiveFunc)ippiWarpPerspectiveBack_16u_C4R :
+                type == CV_32FC1 ? (ippiWarpPerspectiveFunc)ippiWarpPerspectiveBack_32f_C1R :
+                type == CV_32FC3 ? (ippiWarpPerspectiveFunc)ippiWarpPerspectiveBack_32f_C3R :
+                type == CV_32FC4 ? (ippiWarpPerspectiveFunc)ippiWarpPerspectiveBack_32f_C4R : 0;
+            }
+            else
+            {
+                ippFunc = type == CV_8UC1 ? (ippiWarpPerspectiveFunc)ippiWarpPerspective_8u_C1R :
+                type == CV_8UC3 ? (ippiWarpPerspectiveFunc)ippiWarpPerspective_8u_C3R :
+                type == CV_8UC4 ? (ippiWarpPerspectiveFunc)ippiWarpPerspective_8u_C4R :
+                type == CV_16UC1 ? (ippiWarpPerspectiveFunc)ippiWarpPerspective_16u_C1R :
+                type == CV_16UC3 ? (ippiWarpPerspectiveFunc)ippiWarpPerspective_16u_C3R :
+                type == CV_16UC4 ? (ippiWarpPerspectiveFunc)ippiWarpPerspective_16u_C4R :
+                type == CV_32FC1 ? (ippiWarpPerspectiveFunc)ippiWarpPerspective_32f_C1R :
+                type == CV_32FC3 ? (ippiWarpPerspectiveFunc)ippiWarpPerspective_32f_C3R :
+                type == CV_32FC4 ? (ippiWarpPerspectiveFunc)ippiWarpPerspective_32f_C4R : 0;
+            }
+            int mode =
+            interpolation == INTER_NEAREST ? IPPI_INTER_NN :
+            interpolation == INTER_LINEAR ? IPPI_INTER_LINEAR :
+            interpolation == INTER_CUBIC ? IPPI_INTER_CUBIC : 0;
+            CV_Assert(mode && ippFunc);
 
-        double coeffs[3][3];
-        for( int i = 0; i < 3; i++ )
-            for( int j = 0; j < 3; j++ )
-                coeffs[i][j] = matM.at<double>(i, j);
+            double coeffs[3][3];
+            for( int i = 0; i < 3; i++ )
+                for( int j = 0; j < 3; j++ )
+                    coeffs[i][j] = matM.at<double>(i, j);
 
-        bool ok;
-        Range range(0, dst.rows);
-        IPPWarpPerspectiveInvoker invoker(src, dst, coeffs, mode, borderType, borderValue, ippFunc, &ok);
-        parallel_for_(range, invoker, dst.total()/(double)(1<<16));
-        if( ok )
-            return;
-        setIppErrorStatus();
+            bool ok;
+            Range range(0, dst.rows);
+            IPPWarpPerspectiveInvoker invoker(src, dst, coeffs, mode, borderType, borderValue, ippFunc, &ok);
+            parallel_for_(range, invoker, dst.total()/(double)(1<<16));
+            if( ok )
+            {
+                CV_IMPL_ADD(CV_IMPL_IPP|CV_IMPL_MT);
+                return;
+            }
+            setIppErrorStatus();
+        }
     }
 #endif
 
@@ -4625,7 +5003,7 @@ cv::Mat cv::getRotationMatrix2D( Point2f center, double angle, double scale )
     double beta = sin(angle)*scale;
 
     Mat M(2, 3, CV_64F);
-    double* m = (double*)M.data;
+    double* m = M.ptr<double>();
 
     m[0] = alpha;
     m[1] = beta;
@@ -4663,7 +5041,7 @@ cv::Mat cv::getRotationMatrix2D( Point2f center, double angle, double scale )
  */
 cv::Mat cv::getPerspectiveTransform( const Point2f src[], const Point2f dst[] )
 {
-    Mat M(3, 3, CV_64F), X(8, 1, CV_64F, M.data);
+    Mat M(3, 3, CV_64F), X(8, 1, CV_64F, M.ptr());
     double a[8][8], b[8];
     Mat A(8, 8, CV_64F, a), B(8, 1, CV_64F, b);
 
@@ -4683,7 +5061,7 @@ cv::Mat cv::getPerspectiveTransform( const Point2f src[], const Point2f dst[] )
     }
 
     solve( A, B, X, DECOMP_SVD );
-    ((double*)M.data)[8] = 1.;
+    M.ptr<double>()[8] = 1.;
 
     return M;
 }
@@ -4709,7 +5087,7 @@ cv::Mat cv::getPerspectiveTransform( const Point2f src[], const Point2f dst[] )
 
 cv::Mat cv::getAffineTransform( const Point2f src[], const Point2f dst[] )
 {
-    Mat M(2, 3, CV_64F), X(6, 1, CV_64F, M.data);
+    Mat M(2, 3, CV_64F), X(6, 1, CV_64F, M.ptr());
     double a[6*6], b[6];
     Mat A(6, 6, CV_64F, a), B(6, 1, CV_64F, b);
 
@@ -4739,8 +5117,8 @@ void cv::invertAffineTransform(InputArray _matM, OutputArray __iM)
 
     if( matM.type() == CV_32F )
     {
-        const float* M = (const float*)matM.data;
-        float* iM = (float*)_iM.data;
+        const float* M = matM.ptr<float>();
+        float* iM = _iM.ptr<float>();
         int step = (int)(matM.step/sizeof(M[0])), istep = (int)(_iM.step/sizeof(iM[0]));
 
         double D = M[0]*M[step+1] - M[1]*M[step];
@@ -4754,8 +5132,8 @@ void cv::invertAffineTransform(InputArray _matM, OutputArray __iM)
     }
     else if( matM.type() == CV_64F )
     {
-        const double* M = (const double*)matM.data;
-        double* iM = (double*)_iM.data;
+        const double* M = matM.ptr<double>();
+        double* iM = _iM.ptr<double>();
         int step = (int)(matM.step/sizeof(M[0])), istep = (int)(_iM.step/sizeof(iM[0]));
 
         double D = M[0]*M[step+1] - M[1]*M[step];
@@ -4883,7 +5261,7 @@ cvConvertMaps( const CvArr* arr1, const CvArr* arr2, CvArr* dstarr1, CvArr* dsta
     {
         dstmap2 = cv::cvarrToMat(dstarr2);
         if( dstmap2.type() == CV_16SC1 )
-            dstmap2 = cv::Mat(dstmap2.size(), CV_16UC1, dstmap2.data, dstmap2.step);
+            dstmap2 = cv::Mat(dstmap2.size(), CV_16UC1, dstmap2.ptr(), dstmap2.step);
     }
 
     cv::convertMaps( map1, map2, dstmap1, dstmap2, dstmap1.type(), false );

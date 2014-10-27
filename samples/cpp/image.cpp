@@ -22,6 +22,7 @@ static void help()
 
 #ifdef DEMO_MIXED_API_USE
 #  include <opencv2/highgui/highgui_c.h>
+#  include <opencv2/imgcodecs/imgcodecs_c.h>
 #endif
 
 int main( int argc, char** argv )
@@ -47,7 +48,7 @@ int main( int argc, char** argv )
     }
 #endif
 
-    if( !img.data ) // check if the image has been loaded properly
+    if( img.empty() ) // check if the image has been loaded properly
         return -1;
 
     Mat img_yuv;

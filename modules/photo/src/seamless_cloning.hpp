@@ -455,6 +455,8 @@ void Cloning::normal_clone(Mat &I, Mat &mask, Mat &wmask, Mat &cloned, int num)
 {
     int w = I.size().width;
     int h = I.size().height;
+    int channel = I.channels();
+
 
     initialization(I,mask,wmask);
 
@@ -466,20 +468,33 @@ void Cloning::normal_clone(Mat &I, Mat &mask, Mat &wmask, Mat &cloned, int num)
     }
     else if(num == 2)
     {
+
         for(int i=0;i < h; i++)
-            for(int j=0; j < w; j++)
+        {
+           for(int j=0; j < w; j++)
             {
-                if(abs(sgx.at<float>(i,j) - sgy.at<float>(i,j)) > abs(grx.at<float>(i,j) - gry.at<float>(i,j)))
+                for(int c=0;c<channel;++c)
                 {
-                    srx32.at<float>(i,j) = sgx.at<float>(i,j) * smask.at<float>(i,j);
-                    sry32.at<float>(i,j) = sgy.at<float>(i,j) * smask.at<float>(i,j);
-                }
-                else
-                {
-                    srx32.at<float>(i,j) = grx.at<float>(i,j) * smask.at<float>(i,j);
-                    sry32.at<float>(i,j) = gry.at<float>(i,j) * smask.at<float>(i,j);
+                    if(abs(sgx.at<float>(i,j*channel+c) - sgy.at<float>(i,j*channel+c)) >
+                            abs(grx.at<float>(i,j*channel+c) - gry.at<float>(i,j*channel+c)))
+                    {
+
+                        srx32.at<float>(i,j*channel+c) = sgx.at<float>(i,j*channel+c)
+                            * smask.at<float>(i,j);
+                        sry32.at<float>(i,j*channel+c) = sgy.at<float>(i,j*channel+c)
+                            * smask.at<float>(i,j);
+                    }
+                    else
+                    {
+                        srx32.at<float>(i,j*channel+c) = grx.at<float>(i,j*channel+c)
+                            * smask.at<float>(i,j);
+                        sry32.at<float>(i,j*channel+c) = gry.at<float>(i,j*channel+c)
+                            * smask.at<float>(i,j);
+                    }
                 }
             }
+        }
+
     }
     else if(num == 3)
     {
@@ -533,10 +548,12 @@ void Cloning::illum_change(Mat &I, Mat &mask, Mat &wmask, Mat &cloned, float alp
     multiply(srx32,pow(alpha,beta),multX);
     pow(mag,-1*beta, multx_temp);
     multiply(multX,multx_temp,srx32);
+    patchNaNs(srx32);
 
     multiply(sry32,pow(alpha,beta),multY);
     pow(mag,-1*beta, multy_temp);
     multiply(multY,multy_temp,sry32);
+    patchNaNs(sry32);
 
     Mat zeroMask = (srx32 != 0);
 
