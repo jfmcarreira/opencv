@@ -991,7 +991,7 @@ namespace cv
 #endif
 
 //! Compatibility with c code
-#include "opencv2/core/core_c.h"
+#include "opencv2/core/internal.hpp"
 
 typedef struct CvStereoVARState_STRUCT
 {
