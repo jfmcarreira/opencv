@@ -1453,7 +1453,7 @@ bool useOpenCL()
     {
         try
         {
-            data->useOpenCL = (int)haveOpenCL() && Device::getDefault().ptr() != NULL;
+            data->useOpenCL = (int)haveOpenCL() && Device::getDefault().ptr() && Device::getDefault().available();
         }
         catch (...)
         {
@@ -2130,7 +2130,8 @@ const Device& Device::getDefault()
 {
     const Context& ctx = Context::getDefault();
     int idx = coreTlsData.get()->device;
-    return ctx.device(idx);
+    const Device& device = ctx.device(idx);
+    return device;
 }
 
 ////////////////////////////////////// Context ///////////////////////////////////////////////////
@@ -2210,7 +2211,10 @@ static cl_device_id selectOpenCLDevice()
     std::vector<std::string> deviceTypes;
 
     const char* configuration = getenv("OPENCV_OPENCL_DEVICE");
-    if (configuration && !parseOpenCLDeviceConfiguration(std::string(configuration), platform, deviceTypes, deviceName))
+    if (configuration &&
+            (strcmp(configuration, "disabled") == 0 ||
+             !parseOpenCLDeviceConfiguration(std::string(configuration), platform, deviceTypes, deviceName)
+            ))
         return NULL;
 
     bool isID = false;
@@ -2339,14 +2343,16 @@ static cl_device_id selectOpenCLDevice()
     }
 
 not_found:
-    std::cerr << "ERROR: Required OpenCL device not found, check configuration: " << (configuration == NULL ? "" : configuration) << std::endl
+    if (!configuration)
+        return NULL; // suppress messages on stderr
+
+    std::cerr << "ERROR: Requested OpenCL device not found, check configuration: " << (configuration == NULL ? "" : configuration) << std::endl
             << "    Platform: " << (platform.length() == 0 ? "any" : platform) << std::endl
             << "    Device types: ";
     for (size_t t = 0; t < deviceTypes.size(); t++)
         std::cerr << deviceTypes[t] << " ";
 
     std::cerr << std::endl << "    Device name: " << (deviceName.length() == 0 ? "any" : deviceName) << std::endl;
-    CV_Error(CL_INVALID_DEVICE, "Requested OpenCL device is not found");
     return NULL;
 }
 #endif
@@ -3109,7 +3115,7 @@ bool Kernel::compileWorkGroupSize(size_t wsz[]) const
     size_t retsz = 0;
     cl_device_id dev = (cl_device_id)Device::getDefault().ptr();
     return clGetKernelWorkGroupInfo(p->handle, dev, CL_KERNEL_COMPILE_WORK_GROUP_SIZE,
-                                    sizeof(wsz[0]*3), wsz, &retsz) == CL_SUCCESS;
+                                    sizeof(wsz[0])*3, wsz, &retsz) == CL_SUCCESS;
 }
 
 size_t Kernel::localMemSize() const
@@ -4536,12 +4542,14 @@ int predictOptimalVectorWidth(InputArray src1, InputArray src2, InputArray src3,
     return checkOptimalVectorWidth(vectorWidths, src1, src2, src3, src4, src5, src6, src7, src8, src9, strat);
 }
 
-int checkOptimalVectorWidth(int *vectorWidths,
+int checkOptimalVectorWidth(const int *vectorWidths,
                             InputArray src1, InputArray src2, InputArray src3,
                             InputArray src4, InputArray src5, InputArray src6,
                             InputArray src7, InputArray src8, InputArray src9,
                             OclVectorStrategy strat)
 {
+    CV_Assert(vectorWidths);
+
     int ref_type = src1.type();
 
     std::vector<size_t> offsets, steps, cols;

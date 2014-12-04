@@ -38,6 +38,11 @@ if(POLICY CMP0022)
   cmake_policy(SET CMP0022 OLD)
 endif()
 
+if(POLICY CMP0026)
+  # silence cmake 3.0+ warnings about reading LOCATION attribute
+  cmake_policy(SET CMP0026 OLD)
+endif()
+
 # must go before the project command
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Configs" FORCE)
 if(DEFINED CMAKE_BUILD_TYPE)
@@ -458,8 +463,13 @@ include(cmake/OpenCVFindLibsPerf.cmake)
 # ----------------------------------------------------------------------------
 
 # --- LATEX for pdf documentation ---
+unset(HAVE_DOXYGEN CACHE)
 if(BUILD_DOCS)
   include(cmake/OpenCVFindLATEX.cmake)
+  find_host_program(DOXYGEN_BUILD doxygen)
+  if (DOXYGEN_BUILD)
+    set(HAVE_DOXYGEN 1)
+  endif (DOXYGEN_BUILD)
 endif(BUILD_DOCS)
 
 # --- Python Support ---
@@ -1071,6 +1081,7 @@ if(BUILD_DOCS)
   status("    Sphinx:"              HAVE_SPHINX              THEN "${SPHINX_BUILD} (ver ${SPHINX_VERSION})" ELSE NO)
   status("    PdfLaTeX compiler:"   PDFLATEX_COMPILER        THEN "${PDFLATEX_COMPILER}" ELSE NO)
   status("    PlantUML:"            PLANTUML                 THEN "${PLANTUML}" ELSE NO)
+  status("    Doxygen:"             HAVE_DOXYGEN             THEN "YES (${DOXYGEN_BUILD})" ELSE NO)
 endif()
 
 # ========================== samples and tests ==========================
