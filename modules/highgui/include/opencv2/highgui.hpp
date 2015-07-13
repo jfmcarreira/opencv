@@ -79,7 +79,7 @@ It provides easy interface to:
         attached to the control panel is a trackbar, or the control panel is empty, a new buttonbar is
         created. Then, a new button is attached to it.
 
-    See below the example used to generate the figure: :
+    See below the example used to generate the figure:
     @code
         int main(int argc, char *argv[])
             int value = 50;
@@ -119,6 +119,45 @@ It provides easy interface to:
             cvReleaseImage(&img3);
             cvReleaseCapture(&video);
             return 0;
+        }
+    @endcode
+
+
+    @defgroup highgui_winrt WinRT support
+
+    This figure explains new functionality implemented with WinRT GUI. The new GUI provides an Image control,
+    and a slider panel. Slider panel holds trackbars attached to it.
+
+    Sliders are attached below the image control. Every new slider is added below the previous one.
+
+    See below the example used to generate the figure:
+    @code
+        void sample_app::MainPage::ShowWindow()
+        {
+            static cv::String windowName("sample");
+            cv::winrt_initContainer(this->cvContainer);
+            cv::namedWindow(windowName); // not required
+
+            cv::Mat image = cv::imread("Assets/sample.jpg");
+            cv::Mat converted = cv::Mat(image.rows, image.cols, CV_8UC4);
+            cvtColor(image, converted, CV_BGR2BGRA);
+            cv::imshow(windowName, converted); // this will create window if it hasn't been created before
+
+            int state = 42;
+            cv::TrackbarCallback callback = [](int pos, void* userdata)
+            {
+                if (pos == 0) {
+                    cv::destroyWindow(windowName);
+                }
+            };
+            cv::TrackbarCallback callbackTwin = [](int pos, void* userdata)
+            {
+                if (pos >= 70) {
+                    cv::destroyAllWindows();
+                }
+            };
+            cv::createTrackbar("Sample trackbar", windowName, &state, 100, callback);
+            cv::createTrackbar("Twin brother", windowName, &state, 100, callbackTwin);
         }
     @endcode
 
@@ -275,8 +314,8 @@ CV_EXPORTS_W int waitKey(int delay = 0);
 @param mat Image to be shown.
 
 The function imshow displays an image in the specified window. If the window was created with the
-CV_WINDOW_AUTOSIZE flag, the image is shown with its original size. Otherwise, the image is scaled
-to fit the window. The function may scale the image, depending on its depth:
+CV_WINDOW_AUTOSIZE flag, the image is shown with its original size, however it is still limited by the screen resolution.
+Otherwise, the image is scaled to fit the window. The function may scale the image, depending on its depth:
 
 -   If the image is 8-bit unsigned, it is displayed as is.
 -   If the image is 16-bit unsigned or 32-bit integer, the pixels are divided by 256. That is, the
@@ -286,6 +325,10 @@ to fit the window. The function may scale the image, depending on its depth:
 
 If window was created with OpenGL support, imshow also support ogl::Buffer , ogl::Texture2D and
 cuda::GpuMat as input.
+
+If the window was not created before this function, it is assumed creating a window with CV_WINDOW_AUTOSIZE.
+
+If you need to show an image that is bigger than the screen resolution, you will need to call namedWindow("", WINDOW_NORMAL) before the imshow.
 
 @note This function should be followed by waitKey function which displays the image for specified
 milliseconds. Otherwise, it won't display the image. For example, waitKey(0) will display the window
@@ -462,6 +505,21 @@ The function sets the position of the specified trackbar in the specified window
 panel.
  */
 CV_EXPORTS_W void setTrackbarPos(const String& trackbarname, const String& winname, int pos);
+
+/** @brief Sets the trackbar maximum position.
+
+@param trackbarname Name of the trackbar.
+@param winname Name of the window that is the parent of trackbar.
+@param maxval New maximum position.
+
+The function sets the maximum position of the specified trackbar in the specified window.
+
+@note
+
+**[Qt Backend Only]** winname can be empty (or NULL) if the trackbar is attached to the control
+panel.
+ */
+CV_EXPORTS_W void setTrackbarMax(const String& trackbarname, const String& winname, int maxval);
 
 //! @addtogroup highgui_opengl OpenGL support
 //! @{
@@ -677,4 +735,9 @@ CV_EXPORTS int createButton( const String& bar_name, ButtonCallback on_change,
 //! @} highgui
 
 } // cv
+
+#ifndef DISABLE_OPENCV_24_COMPATIBILITY
+#include "opencv2/highgui/highgui_c.h"
+#endif
+
 #endif

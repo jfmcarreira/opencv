@@ -303,7 +303,10 @@ struct Ptr
     @note It is often easier to use makePtr instead.
      */
     template<typename Y>
-    explicit Ptr(Y* p);
+#ifdef DISABLE_OPENCV_24_COMPATIBILITY
+    explicit
+#endif
+    Ptr(Y* p);
 
     /** @overload
     @param d Deleter to use for the owned pointer.
@@ -1037,9 +1040,11 @@ static inline bool operator>= (const String& lhs, const char*   rhs) { return lh
 
 #ifndef OPENCV_NOSTL_TRANSITIONAL
 namespace std
+{
+    static inline void swap(cv::String& a, cv::String& b) { a.swap(b); }
+}
 #else
 namespace cv
-#endif
 {
     template<> inline
     void swap<cv::String>(cv::String& a, cv::String& b)
@@ -1047,6 +1052,7 @@ namespace cv
         a.swap(b);
     }
 }
+#endif
 
 #include "opencv2/core/ptr.inl.hpp"
 

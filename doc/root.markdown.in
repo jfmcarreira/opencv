@@ -1,16 +1,12 @@
 OpenCV modules {#mainpage}
 ==============
 
-@subpage intro
+- @ref intro
+- @ref tutorial_root
+- @ref tutorial_py_root
+- @ref faq
+- @ref citelist
 
-### Main modules
-
- Module name   | Folder
--------------- | -------------
 @CMAKE_DOXYGEN_MAIN_REFERENCE@
 
-### Extra modules
-
- Module name   | Folder
--------------- | -------------
 @CMAKE_DOXYGEN_EXTRA_REFERENCE@
