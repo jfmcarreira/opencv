@@ -519,7 +519,7 @@ The function LUT fills the output array with values from the look-up table. Indi
 are taken from the input array. That is, the function processes each element of src as follows:
 \f[\texttt{dst} (I)  \leftarrow \texttt{lut(src(I) + d)}\f]
 where
-\f[d =  \fork{0}{if \texttt{src} has depth \texttt{CV\_8U}}{128}{if \texttt{src} has depth \texttt{CV\_8S}}\f]
+\f[d =  \fork{0}{if \(\texttt{src}\) has depth \(\texttt{CV_8U}\)}{128}{if \(\texttt{src}\) has depth \(\texttt{CV_8S}\)}\f]
 @param src input array of 8-bit elements.
 @param lut look-up table of 256 elements; in case of multi-channel input array, the table should
 either have a single channel (in this case the same table is used for all channels) or the same
@@ -617,21 +617,21 @@ relative difference norm.
 The functions norm calculate an absolute norm of src1 (when there is no
 src2 ):
 
-\f[norm =  \forkthree{\|\texttt{src1}\|_{L_{\infty}} =  \max _I | \texttt{src1} (I)|}{if  \(\texttt{normType} = \texttt{NORM\_INF}\) }
-{ \| \texttt{src1} \| _{L_1} =  \sum _I | \texttt{src1} (I)|}{if  \(\texttt{normType} = \texttt{NORM\_L1}\) }
-{ \| \texttt{src1} \| _{L_2} =  \sqrt{\sum_I \texttt{src1}(I)^2} }{if  \(\texttt{normType} = \texttt{NORM\_L2}\) }\f]
+\f[norm =  \forkthree{\|\texttt{src1}\|_{L_{\infty}} =  \max _I | \texttt{src1} (I)|}{if  \(\texttt{normType} = \texttt{NORM_INF}\) }
+{ \| \texttt{src1} \| _{L_1} =  \sum _I | \texttt{src1} (I)|}{if  \(\texttt{normType} = \texttt{NORM_L1}\) }
+{ \| \texttt{src1} \| _{L_2} =  \sqrt{\sum_I \texttt{src1}(I)^2} }{if  \(\texttt{normType} = \texttt{NORM_L2}\) }\f]
 
 or an absolute or relative difference norm if src2 is there:
 
-\f[norm =  \forkthree{\|\texttt{src1}-\texttt{src2}\|_{L_{\infty}} =  \max _I | \texttt{src1} (I) -  \texttt{src2} (I)|}{if  \(\texttt{normType} = \texttt{NORM\_INF}\) }
-{ \| \texttt{src1} - \texttt{src2} \| _{L_1} =  \sum _I | \texttt{src1} (I) -  \texttt{src2} (I)|}{if  \(\texttt{normType} = \texttt{NORM\_L1}\) }
-{ \| \texttt{src1} - \texttt{src2} \| _{L_2} =  \sqrt{\sum_I (\texttt{src1}(I) - \texttt{src2}(I))^2} }{if  \(\texttt{normType} = \texttt{NORM\_L2}\) }\f]
+\f[norm =  \forkthree{\|\texttt{src1}-\texttt{src2}\|_{L_{\infty}} =  \max _I | \texttt{src1} (I) -  \texttt{src2} (I)|}{if  \(\texttt{normType} = \texttt{NORM_INF}\) }
+{ \| \texttt{src1} - \texttt{src2} \| _{L_1} =  \sum _I | \texttt{src1} (I) -  \texttt{src2} (I)|}{if  \(\texttt{normType} = \texttt{NORM_L1}\) }
+{ \| \texttt{src1} - \texttt{src2} \| _{L_2} =  \sqrt{\sum_I (\texttt{src1}(I) - \texttt{src2}(I))^2} }{if  \(\texttt{normType} = \texttt{NORM_L2}\) }\f]
 
 or
 
-\f[norm =  \forkthree{\frac{\|\texttt{src1}-\texttt{src2}\|_{L_{\infty}}    }{\|\texttt{src2}\|_{L_{\infty}} }}{if  \(\texttt{normType} = \texttt{NORM\_RELATIVE\_INF}\) }
-{ \frac{\|\texttt{src1}-\texttt{src2}\|_{L_1} }{\|\texttt{src2}\|_{L_1}} }{if  \(\texttt{normType} = \texttt{NORM\_RELATIVE\_L1}\) }
-{ \frac{\|\texttt{src1}-\texttt{src2}\|_{L_2} }{\|\texttt{src2}\|_{L_2}} }{if  \(\texttt{normType} = \texttt{NORM\_RELATIVE\_L2}\) }\f]
+\f[norm =  \forkthree{\frac{\|\texttt{src1}-\texttt{src2}\|_{L_{\infty}}    }{\|\texttt{src2}\|_{L_{\infty}} }}{if  \(\texttt{normType} = \texttt{NORM_RELATIVE_INF}\) }
+{ \frac{\|\texttt{src1}-\texttt{src2}\|_{L_1} }{\|\texttt{src2}\|_{L_1}} }{if  \(\texttt{normType} = \texttt{NORM_RELATIVE_L1}\) }
+{ \frac{\|\texttt{src1}-\texttt{src2}\|_{L_2} }{\|\texttt{src2}\|_{L_2}} }{if  \(\texttt{normType} = \texttt{NORM_RELATIVE_L2}\) }\f]
 
 The functions norm return the calculated norm.
 
@@ -693,6 +693,37 @@ min-max but modify the whole array, you can use norm and Mat::convertTo.
 
 In case of sparse matrices, only the non-zero values are analyzed and transformed. Because of this,
 the range transformation for sparse matrices is not allowed since it can shift the zero level.
+
+Possible usage with some positive example data:
+@code{.cpp}
+    vector<double> positiveData = { 2.0, 8.0, 10.0 };
+    vector<double> normalizedData_l1, normalizedData_l2, normalizedData_inf, normalizedData_minmax;
+
+    // Norm to probability (total count)
+    // sum(numbers) = 20.0
+    // 2.0      0.1     (2.0/20.0)
+    // 8.0      0.4     (8.0/20.0)
+    // 10.0     0.5     (10.0/20.0)
+    normalize(positiveData, normalizedData_l1, 1.0, 0.0, NORM_L1);
+
+    // Norm to unit vector: ||positiveData|| = 1.0
+    // 2.0      0.15
+    // 8.0      0.62
+    // 10.0     0.77
+    normalize(positiveData, normalizedData_l2, 1.0, 0.0, NORM_L2);
+
+    // Norm to max element
+    // 2.0      0.2     (2.0/10.0)
+    // 8.0      0.8     (8.0/10.0)
+    // 10.0     1.0     (10.0/10.0)
+    normalize(positiveData, normalizedData_inf, 1.0, 0.0, NORM_INF);
+
+    // Norm to range [0.0;1.0]
+    // 2.0      0.0     (shift to left border)
+    // 8.0      0.75    (6.0/8.0)
+    // 10.0     1.0     (shift to right border)
+    normalize(positiveData, normalizedData_minmax, 1.0, 0.0, NORM_MINMAX);
+@endcode
 
 @param src input array.
 @param dst output array of the same size as src .
@@ -1345,7 +1376,7 @@ CV_EXPORTS_W void sqrt(InputArray src, OutputArray dst);
 /** @brief Raises every array element to a power.
 
 The function pow raises every element of the input array to power :
-\f[\texttt{dst} (I) =  \fork{\texttt{src}(I)^power}{if \texttt{power} is integer}{|\texttt{src}(I)|^power}{otherwise}\f]
+\f[\texttt{dst} (I) =  \fork{\texttt{src}(I)^{power}}{if \(\texttt{power}\) is integer}{|\texttt{src}(I)|^{power}}{otherwise}\f]
 
 So, for a non-integer power exponent, the absolute values of input array
 elements are used. However, it is possible to get true values for
@@ -2381,8 +2412,7 @@ class CV_EXPORTS LDA
 {
 public:
     /** @brief constructor
-    Initializes a LDA with num_components (default 0) and specifies how
-    samples are aligned (default dataAsRow=true).
+    Initializes a LDA with num_components (default 0).
     */
     explicit LDA(int num_components = 0);
 
@@ -2413,15 +2443,17 @@ public:
       */
     ~LDA();
 
-    /** Compute the discriminants for data in src and labels.
+    /** Compute the discriminants for data in src (row aligned) and labels.
       */
     void compute(InputArrayOfArrays src, InputArray labels);
 
     /** Projects samples into the LDA subspace.
+        src may be one or more row aligned samples.
       */
     Mat project(InputArray src);
 
     /** Reconstructs projections from the LDA subspace.
+        src may be one or more row aligned projections.
       */
     Mat reconstruct(InputArray src);
 
@@ -2437,11 +2469,10 @@ public:
     static Mat subspaceReconstruct(InputArray W, InputArray mean, InputArray src);
 
 protected:
-    bool _dataAsRow;
+    bool _dataAsRow; // unused, but needed for 3.0 ABI compatibility.
     int _num_components;
     Mat _eigenvectors;
     Mat _eigenvalues;
-
     void lda(InputArrayOfArrays src, InputArray labels);
 };
 
