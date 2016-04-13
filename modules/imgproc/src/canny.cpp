@@ -171,7 +171,67 @@ void cv::Canny( InputArray _src, OutputArray _dst,
     #define CANNY_PUSH(d)    *(d) = uchar(2), *stack_top++ = (d)
     #define CANNY_POP(d)     (d) = *--stack_top
 
-    // calculate magnitude and angle of gradient, perform non-maxima suppression.
+    //!< Begin: Automatic threshold
+    if( high == 0 || low == 0 )
+    {
+      int *__amag, *amag = (int *)cvAlloc( src.rows * src.cols* sizeof(int) );
+      int max = 0;
+      // step 3: get the high threshold
+      double percent_of_pixels_not_edges = 0.7;
+      double threshold_ratio = 0.4;
+
+      for( int i = 0; i < src.rows; i++ )
+      {
+	short* _adx = dx.ptr<short>(i);
+	short* _ady = dy.ptr<short>(i);
+	__amag = amag + src.cols * i;
+	for( int j = 0; j < src.cols; j++ )
+	{
+	  __amag[j] = std::abs(_adx[j]) + std::abs(_ady[j]);
+	  if( __amag[j] > max ) 
+	  {
+	    max = __amag[j];
+	  }
+	}
+      }
+
+      // step 2: Get the histogram of the data.
+  #define NUM_BINS 64
+      // might want to make this max - min / NUM_BINS after you have normalized.
+      int bin_size = max / NUM_BINS;
+      if (bin_size < 1) bin_size = 1;
+      int bins[NUM_BINS] = { 0 };
+
+      for ( int i = 0; i < src.rows; i++) {
+	__amag = amag + (src.cols) * i;
+	for( int j = 0; j < src.cols; j++ ) {
+	  bins[__amag[j] / bin_size]++;
+	}
+      }
+      
+      if( high != 0 )
+      {
+	// step 3: get the high threshold
+	percent_of_pixels_not_edges = (double)high/10;
+	threshold_ratio = 0.4;
+      }
+      int total = 0;
+      high = 0;
+      // size.height should be here too, but right now we're going row-by-row
+      while (total < src.rows * src.cols * percent_of_pixels_not_edges) {
+	total+= bins[high];
+	high++;
+      }
+
+      high *= bin_size;
+      low = threshold_ratio * high;
+
+      cvFree( &amag );
+
+    }
+    //!< End: Automatic threshold
+    
+    // calculate magnitude and angle of gradient, perform non-maxima supression.
     // fill the map with one of the following values:
     //   0 - the pixel might belong to an edge
     //   1 - the pixel can not belong to an edge

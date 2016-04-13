@@ -995,4 +995,33 @@ namespace cv
 
 #endif
 
+//! Compatibility with c code
+#include "opencv2/core/internal.hpp"
+
+typedef struct CvStereoVARState_STRUCT
+{
+	int numberOfDisparities;
+	int penalization;
+	int levels;			// ignored with USE_AUTO_PARAMS
+	double pyrScale;				// ignored with USE_AUTO_PARAMS
+	int nIt;
+	int minDisp;	
+	int maxDisp;
+	int poly_n;
+	double poly_sigma;
+	double fi;
+	double lambda;
+
+}CvStereoVARState;
+
+CV_IMPL CvStereoVARState* cvCreateStereoVARState( int /*preset*/, int numberOfDisparities, int penalization );
+CV_IMPL void cvFindStereoCorrespondenceVAR( IplImage *left_img, IplImage* right_img,
+  IplImage** disparity_img , CvStereoVARState *state );
+CV_IMPL void cvReleaseStereoVARState( CvStereoVARState** state );
+
+//! End edited By Joao Carreira
+
+#include "opencv2/contrib/retina.hpp"
+#include "opencv2/contrib/openfabmap.hpp"
+
 #endif
