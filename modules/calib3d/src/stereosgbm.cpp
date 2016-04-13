@@ -52,7 +52,7 @@
 
 #include "precomp.hpp"
 #include <limits.h>
-#include "opencv2/hal/intrin.hpp"
+#include "opencv2/core/hal/intrin.hpp"
 
 namespace cv
 {
@@ -1512,6 +1512,7 @@ public:
 
     void write(FileStorage& fs) const
     {
+        writeFormat(fs);
         fs << "name" << name_
         << "minDisparity" << params.minDisparity
         << "numDisparities" << params.numDisparities

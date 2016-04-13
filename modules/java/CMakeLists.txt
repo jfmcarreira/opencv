@@ -1,7 +1,8 @@
 # ----------------------------------------------------------------------------
 #  CMake file for java support
 # ----------------------------------------------------------------------------
-if(IOS OR WINRT OR NOT PYTHON_DEFAULT_AVAILABLE OR NOT ANT_EXECUTABLE OR NOT (JNI_FOUND OR (ANDROID AND ANDROID_NATIVE_API_LEVEL GREATER 7))
+if(APPLE_FRAMEWORK OR WINRT OR NOT PYTHON_DEFAULT_AVAILABLE OR NOT ANT_EXECUTABLE
+    OR NOT (JNI_FOUND OR (ANDROID AND ANDROID_NATIVE_API_LEVEL GREATER 7))
     OR BUILD_opencv_world
     )
   ocv_module_disable(java)
@@ -286,9 +287,12 @@ if(ANDROID AND ANDROID_EXECUTABLE)
 
   install(FILES "${OpenCV_BINARY_DIR}/${ANDROID_PROJECT_PROPERTIES_FILE}" DESTINATION ${JAVA_INSTALL_ROOT} COMPONENT java)
   install(FILES "${OpenCV_BINARY_DIR}/${ANDROID_MANIFEST_FILE}" DESTINATION ${JAVA_INSTALL_ROOT} COMPONENT java)
+
   # creating empty 'gen' and 'res' folders
-  install(CODE "MAKE_DIRECTORY(\"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${JAVA_INSTALL_ROOT}/gen\")" COMPONENT java)
-  install(CODE "MAKE_DIRECTORY(\"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${JAVA_INSTALL_ROOT}/res\")" COMPONENT java)
+  file(MAKE_DIRECTORY ${OpenCV_BINARY_DIR}/sdk/java/gen ${OpenCV_BINARY_DIR}/sdk/java/res )
+
+  install(DIRECTORY ${OpenCV_BINARY_DIR}/sdk/java/gen DESTINATION ${JAVA_INSTALL_ROOT}/ COMPONENT java)
+  install(DIRECTORY ${OpenCV_BINARY_DIR}/sdk/java/res DESTINATION ${JAVA_INSTALL_ROOT}/ COMPONENT java)
 endif(ANDROID AND ANDROID_EXECUTABLE)
 
 set(step3_depends ${step2_depends} ${step3_input_files} ${copied_files})

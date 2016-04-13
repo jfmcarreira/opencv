@@ -44,7 +44,7 @@
 #include "cap_dshow.hpp"
 
 // All WinRT versions older than 8.0 should provide classes used for video support
-#if defined(WINRT) && !defined(WINRT_8_0)
+#if defined(WINRT) && !defined(WINRT_8_0) && defined(__cplusplus_winrt)
 #   include "cap_winrt_capture.hpp"
 #   include "cap_winrt_bridge.hpp"
 #   define WINRT_VIDEO
@@ -166,10 +166,12 @@ CV_IMPL CvCapture * cvCreateCameraCapture (int index)
 
 #ifdef HAVE_GSTREAMER
         if (!capture)
-            capture = cvCreateCapture_GStreamer(CV_CAP_GSTREAMER_V4L2, 0);
+            capture = cvCreateCapture_GStreamer(CV_CAP_GSTREAMER_V4L2,
+                                                reinterpret_cast<char *>(index));
 
         if (!capture)
-            capture = cvCreateCapture_GStreamer(CV_CAP_GSTREAMER_V4L, 0);
+            capture = cvCreateCapture_GStreamer(CV_CAP_GSTREAMER_V4L,
+                                                reinterpret_cast<char *>(index));
 #endif
         if (pref) break; // CV_CAP_VFW
 
@@ -288,6 +290,11 @@ CV_IMPL CvCapture * cvCreateFileCaptureWithPreference (const char * filename, in
     case CV_CAP_VFW:
         if (! result)
             result = cvCreateFileCapture_VFW (filename);
+        if (apiPreference) break;
+#endif
+#if defined HAVE_LIBV4L || defined HAVE_CAMV4L || defined HAVE_CAMV4L2 || defined HAVE_VIDEOIO
+        if (!result)
+            result = cvCreateCameraCapture_V4L(filename);
         if (apiPreference) break;
 #endif
 

@@ -381,16 +381,10 @@ bool checkHardwareSupport(int feature)
 
 volatile bool useOptimizedFlag = true;
 
-volatile bool USE_SSE2 = featuresEnabled.have[CV_CPU_SSE2];
-volatile bool USE_SSE4_2 = featuresEnabled.have[CV_CPU_SSE4_2];
-volatile bool USE_AVX = featuresEnabled.have[CV_CPU_AVX];
-volatile bool USE_AVX2 = featuresEnabled.have[CV_CPU_AVX2];
-
 void setUseOptimized( bool flag )
 {
     useOptimizedFlag = flag;
     currentFeatures = flag ? &featuresEnabled : &featuresDisabled;
-    USE_SSE2 = currentFeatures->have[CV_CPU_SSE2];
 
     ipp::setUseIPP(flag);
 #ifdef HAVE_OPENCL
@@ -1091,11 +1085,14 @@ public:
 
         for(size_t i = 0; i < threads.size(); i++)
         {
-            std::vector<void*>& thread_slots = threads[i]->slots;
-            if (thread_slots.size() > slotIdx && thread_slots[slotIdx])
+            if(threads[i])
             {
-                dataVec.push_back(thread_slots[slotIdx]);
-                threads[i]->slots[slotIdx] = 0;
+                std::vector<void*>& thread_slots = threads[i]->slots;
+                if (thread_slots.size() > slotIdx && thread_slots[slotIdx])
+                {
+                    dataVec.push_back(thread_slots[slotIdx]);
+                    threads[i]->slots[slotIdx] = 0;
+                }
             }
         }
 
@@ -1122,9 +1119,12 @@ public:
 
         for(size_t i = 0; i < threads.size(); i++)
         {
-            std::vector<void*>& thread_slots = threads[i]->slots;
-            if (thread_slots.size() > slotIdx && thread_slots[slotIdx])
-                dataVec.push_back(thread_slots[slotIdx]);
+            if(threads[i])
+            {
+                std::vector<void*>& thread_slots = threads[i]->slots;
+                if (thread_slots.size() > slotIdx && thread_slots[slotIdx])
+                    dataVec.push_back(thread_slots[slotIdx]);
+            }
         }
     }
 
