@@ -42,8 +42,8 @@
 //
 //M*/
 
-#ifndef __OPENCV_CORE_MATRIX_OPERATIONS_HPP__
-#define __OPENCV_CORE_MATRIX_OPERATIONS_HPP__
+#ifndef OPENCV_CORE_MATRIX_OPERATIONS_HPP
+#define OPENCV_CORE_MATRIX_OPERATIONS_HPP
 
 #ifndef __cplusplus
 #  error mat.inl.hpp header must be compiled as C++
@@ -314,8 +314,12 @@ inline _InputOutputArray::_InputOutputArray(const std::vector<UMat>& vec)
 
 inline _InputOutputArray::_InputOutputArray(const cuda::GpuMat& d_mat)
 { init(FIXED_TYPE + FIXED_SIZE + CUDA_GPU_MAT + ACCESS_RW, &d_mat); }
+
 inline _InputOutputArray::_InputOutputArray(const std::vector<cuda::GpuMat>& d_mat)
-{	init(FIXED_TYPE + FIXED_SIZE + STD_VECTOR_CUDA_GPU_MAT + ACCESS_RW, &d_mat);}
+{ init(FIXED_TYPE + FIXED_SIZE + STD_VECTOR_CUDA_GPU_MAT + ACCESS_RW, &d_mat);}
+
+template<> inline _InputOutputArray::_InputOutputArray(std::vector<cuda::GpuMat>& d_mat)
+{ init(FIXED_TYPE + FIXED_SIZE + STD_VECTOR_CUDA_GPU_MAT + ACCESS_RW, &d_mat);}
 
 inline _InputOutputArray::_InputOutputArray(const ogl::Buffer& buf)
 { init(FIXED_TYPE + FIXED_SIZE + OPENGL_BUFFER + ACCESS_RW, &buf); }
@@ -379,6 +383,23 @@ Mat::Mat(int _dims, const int* _sz, int _type, const Scalar& _s)
       datalimit(0), allocator(0), u(0), size(&rows)
 {
     create(_dims, _sz, _type);
+    *this = _s;
+}
+
+inline
+Mat::Mat(const std::vector<int>& _sz, int _type)
+    : flags(MAGIC_VAL), dims(0), rows(0), cols(0), data(0), datastart(0), dataend(0),
+      datalimit(0), allocator(0), u(0), size(&rows)
+{
+    create(_sz, _type);
+}
+
+inline
+Mat::Mat(const std::vector<int>& _sz, int _type, const Scalar& _s)
+    : flags(MAGIC_VAL), dims(0), rows(0), cols(0), data(0), datastart(0), dataend(0),
+      datalimit(0), allocator(0), u(0), size(&rows)
+{
+    create(_sz, _type);
     *this = _s;
 }
 
@@ -676,7 +697,8 @@ void Mat::addref()
         CV_XADD(&u->refcount, 1);
 }
 
-inline void Mat::release()
+inline
+void Mat::release()
 {
     if( u && CV_XADD(&u->refcount, -1) == 1 )
         deallocate();
@@ -684,6 +706,16 @@ inline void Mat::release()
     datastart = dataend = datalimit = data = 0;
     for(int i = 0; i < dims; i++)
         size.p[i] = 0;
+#ifdef _DEBUG
+    flags = MAGIC_VAL;
+    dims = rows = cols = 0;
+    if(step.p != step.buf)
+    {
+        fastFree(step.p);
+        step.p = step.buf;
+        size.p = &rows;
+    }
+#endif
 }
 
 inline
@@ -700,6 +732,12 @@ Mat Mat::operator()( const Rect& roi ) const
 
 inline
 Mat Mat::operator()(const Range* ranges) const
+{
+    return Mat(*this, ranges);
+}
+
+inline
+Mat Mat::operator()(const std::vector<Range>& ranges) const
 {
     return Mat(*this, ranges);
 }
@@ -1352,6 +1390,11 @@ Mat_<_Tp>::Mat_(const Mat_<_Tp>& m, const Range* ranges)
 {}
 
 template<typename _Tp> inline
+Mat_<_Tp>::Mat_(const Mat_<_Tp>& m, const std::vector<Range>& ranges)
+    : Mat(m, ranges)
+{}
+
+template<typename _Tp> inline
 Mat_<_Tp>::Mat_(const Mat& m)
     : Mat()
 {
@@ -1578,6 +1621,12 @@ Mat_<_Tp> Mat_<_Tp>::operator()( const Rect& roi ) const
 
 template<typename _Tp> inline
 Mat_<_Tp> Mat_<_Tp>::operator()( const Range* ranges ) const
+{
+    return Mat_<_Tp>(*this, ranges);
+}
+
+template<typename _Tp> inline
+Mat_<_Tp> Mat_<_Tp>::operator()(const std::vector<Range>& ranges) const
 {
     return Mat_<_Tp>(*this, ranges);
 }
@@ -2546,7 +2595,7 @@ MatConstIterator_<_Tp>& MatConstIterator_<_Tp>::operator = (const MatConstIterat
 }
 
 template<typename _Tp> inline
-_Tp MatConstIterator_<_Tp>::operator *() const
+const _Tp& MatConstIterator_<_Tp>::operator *() const
 {
     return *(_Tp*)(this->ptr);
 }
@@ -2652,7 +2701,7 @@ MatConstIterator_<_Tp> operator - (const MatConstIterator_<_Tp>& a, ptrdiff_t of
 }
 
 template<typename _Tp> inline
-_Tp MatConstIterator_<_Tp>::operator [](ptrdiff_t i) const
+const _Tp& MatConstIterator_<_Tp>::operator [](ptrdiff_t i) const
 {
     return *(_Tp*)MatConstIterator::operator [](i);
 }
@@ -3504,6 +3553,12 @@ UMat UMat::operator()( const Rect& roi ) const
 
 inline
 UMat UMat::operator()(const Range* ranges) const
+{
+    return UMat(*this, ranges);
+}
+
+inline
+UMat UMat::operator()(const std::vector<Range>& ranges) const
 {
     return UMat(*this, ranges);
 }

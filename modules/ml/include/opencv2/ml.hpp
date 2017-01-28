@@ -41,8 +41,8 @@
 //
 //M*/
 
-#ifndef __OPENCV_ML_HPP__
-#define __OPENCV_ML_HPP__
+#ifndef OPENCV_ML_HPP
+#define OPENCV_ML_HPP
 
 #ifdef __cplusplus
 #  include "opencv2/core.hpp"
@@ -190,6 +190,7 @@ public:
     CV_WRAP virtual Mat getTestSampleWeights() const = 0;
     CV_WRAP virtual Mat getVarIdx() const = 0;
     CV_WRAP virtual Mat getVarType() const = 0;
+    CV_WRAP Mat getVarSymbolFlags() const;
     CV_WRAP virtual int getResponseType() const = 0;
     CV_WRAP virtual Mat getTrainSampleIdx() const = 0;
     CV_WRAP virtual Mat getTestSampleIdx() const = 0;
@@ -226,6 +227,9 @@ public:
 
     /** @brief Returns matrix of test samples */
     CV_WRAP Mat getTestSamples() const;
+
+    /** @brief Returns vector of symbolic names captured in loadFromCSV() */
+    CV_WRAP void getNames(std::vector<String>& names) const;
 
     CV_WRAP static Mat getSubVector(const Mat& vec, const Mat& idx);
 
@@ -1165,6 +1169,17 @@ public:
     Algorithm::load to load the pre-trained model.
      */
     CV_WRAP static Ptr<RTrees> create();
+
+    /** @brief Loads and creates a serialized RTree from a file
+     *
+     * Use RTree::save to serialize and store an RTree to disk.
+     * Load the RTree from this file again, by calling this function with the path to the file.
+     * Optionally specify the node for the file containing the classifier
+     *
+     * @param filepath path to serialized RTree
+     * @param nodeName name of node containing the classifier
+     */
+    CV_WRAP static Ptr<RTrees> load(const String& filepath , const String& nodeName = String());
 };
 
 /****************************************************************************************\
@@ -1681,6 +1696,6 @@ CV_EXPORTS void createConcentricSpheresTestSet( int nsamples, int nfeatures, int
 }
 
 #endif // __cplusplus
-#endif // __OPENCV_ML_HPP__
+#endif // OPENCV_ML_HPP
 
 /* End of file. */

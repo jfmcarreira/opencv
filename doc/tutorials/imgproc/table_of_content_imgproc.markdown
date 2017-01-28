@@ -27,6 +27,14 @@ In this section you will learn about the image processing (manipulation) functio
 
     Here we investigate different morphology operators
 
+-	@subpage tutorial_hitOrMiss
+
+    *Compatibility:* \> OpenCV 2.4
+
+    *Author:* Lorena García
+
+    Learn how to find patterns in binary images using the Hit-or-Miss operation
+
 -   @subpage tutorial_moprh_lines_detection
 
     *Compatibility:* \> OpenCV 2.0
@@ -50,6 +58,14 @@ In this section you will learn about the image processing (manipulation) functio
     *Author:* Ana Huamán
 
     After so much processing, it is time to decide which pixels stay!
+
+-   @subpage tutorial_threshold_inRange
+
+    *Compatibility:* \> OpenCV 2.0
+
+    *Author:* Rishiraj Surti
+
+    Thresholding operations using inRange function.
 
 -   @subpage tutorial_filter_2d
 

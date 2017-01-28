@@ -57,7 +57,7 @@ void Tracker::setFirstFrame(const Mat frame, vector<Point2f> bb, string title, S
     drawBoundingBox(first_frame, bb);
     putText(first_frame, title, Point(0, 60), FONT_HERSHEY_PLAIN, 5, Scalar::all(0), 4);
     object_bb = bb;
-    delete ptMask;
+    delete[] ptMask;
 }
 
 Mat Tracker::process(const Mat frame, Stats& stats)
@@ -195,7 +195,7 @@ int main(int argc, char **argv)
         drawStatistics(orb_res, orb_draw_stats);
         vconcat(akaze_res, orb_res, res_frame);
         cv::imshow(video_name, res_frame);
-        if(cv::waitKey(1)==27) break; //quit on ESC button
+        if(waitKey(1)==27) break; //quit on ESC button
     }
     akaze_stats /= i - 1;
     orb_stats /= i - 1;
