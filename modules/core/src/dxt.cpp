@@ -1580,13 +1580,13 @@ public:
             return;
         }
 
-        IppiDFTSpec_C_32fc* pDFTSpec = (IppiDFTSpec_C_32fc*)ippMalloc( sizeSpec );
+        IppiDFTSpec_C_32fc* pDFTSpec = (IppiDFTSpec_C_32fc*)CV_IPP_MALLOC( sizeSpec );
 
         if ( sizeInit > 0 )
-            pMemInit = (Ipp8u*)ippMalloc( sizeInit );
+            pMemInit = (Ipp8u*)CV_IPP_MALLOC( sizeInit );
 
         if ( sizeBuffer > 0 )
-            pBuffer = (Ipp8u*)ippMalloc( sizeBuffer );
+            pBuffer = (Ipp8u*)CV_IPP_MALLOC( sizeBuffer );
 
         status = ippiDFTInit_C_32fc( srcRoiSize, norm_flag, ippAlgHintNone, pDFTSpec, pMemInit );
 
@@ -1661,13 +1661,13 @@ public:
             return;
         }
 
-        IppiDFTSpec_R_32f* pDFTSpec = (IppiDFTSpec_R_32f*)ippMalloc( sizeSpec );
+        IppiDFTSpec_R_32f* pDFTSpec = (IppiDFTSpec_R_32f*)CV_IPP_MALLOC( sizeSpec );
 
         if ( sizeInit > 0 )
-            pMemInit = (Ipp8u*)ippMalloc( sizeInit );
+            pMemInit = (Ipp8u*)CV_IPP_MALLOC( sizeInit );
 
         if ( sizeBuffer > 0 )
-            pBuffer = (Ipp8u*)ippMalloc( sizeBuffer );
+            pBuffer = (Ipp8u*)CV_IPP_MALLOC( sizeBuffer );
 
         status = ippiDFTInit_R_32f( srcRoiSize, norm_flag, ippAlgHintNone, pDFTSpec, pMemInit );
 
@@ -1767,13 +1767,13 @@ static bool ippi_DFT_C_32F(const uchar * src, size_t src_step, uchar * dst, size
     if ( status < 0 )
         return false;
 
-    IppiDFTSpec_C_32fc* pDFTSpec = (IppiDFTSpec_C_32fc*)ippMalloc( sizeSpec );
+    IppiDFTSpec_C_32fc* pDFTSpec = (IppiDFTSpec_C_32fc*)CV_IPP_MALLOC( sizeSpec );
 
     if ( sizeInit > 0 )
-        pMemInit = (Ipp8u*)ippMalloc( sizeInit );
+        pMemInit = (Ipp8u*)CV_IPP_MALLOC( sizeInit );
 
     if ( sizeBuffer > 0 )
-        pBuffer = (Ipp8u*)ippMalloc( sizeBuffer );
+        pBuffer = (Ipp8u*)CV_IPP_MALLOC( sizeBuffer );
 
     status = ippiDFTInit_C_32fc( srcRoiSize, norm_flag, ippAlgHintNone, pDFTSpec, pMemInit );
 
@@ -1823,13 +1823,13 @@ static bool ippi_DFT_R_32F(const uchar * src, size_t src_step, uchar * dst, size
     if ( status < 0 )
         return false;
 
-    IppiDFTSpec_R_32f* pDFTSpec = (IppiDFTSpec_R_32f*)ippMalloc( sizeSpec );
+    IppiDFTSpec_R_32f* pDFTSpec = (IppiDFTSpec_R_32f*)CV_IPP_MALLOC( sizeSpec );
 
     if ( sizeInit > 0 )
-        pMemInit = (Ipp8u*)ippMalloc( sizeInit );
+        pMemInit = (Ipp8u*)CV_IPP_MALLOC( sizeInit );
 
     if ( sizeBuffer > 0 )
-        pBuffer = (Ipp8u*)ippMalloc( sizeBuffer );
+        pBuffer = (Ipp8u*)CV_IPP_MALLOC( sizeBuffer );
 
     status = ippiDFTInit_R_32f( srcRoiSize, norm_flag, ippAlgHintNone, pDFTSpec, pMemInit );
 
@@ -2135,13 +2135,38 @@ static bool ocl_dft_cols(InputArray _src, OutputArray _dst, int nonzero_cols, in
     return plan->enqueueTransform(_src, _dst, nonzero_cols, flags, fftType, false);
 }
 
+inline FftType determineFFTType(bool real_input, bool complex_input, bool real_output, bool complex_output, bool inv)
+{
+    // output format is not specified
+    if (!real_output && !complex_output)
+        complex_output = true;
+
+    // input or output format is ambiguous
+    if (real_input == complex_input || real_output == complex_output)
+        CV_Error(Error::StsBadArg, "Invalid FFT input or output format");
+
+    FftType result = real_input ? (real_output ? R2R : R2C) : (real_output ? C2R : C2C);
+
+    // Forward Complex to CCS not supported
+    if (result == C2R && !inv)
+        result = C2C;
+
+    // Inverse CCS to Complex not supported
+    if (result == R2C && inv)
+        result = R2R;
+
+    return result;
+}
+
 static bool ocl_dft(InputArray _src, OutputArray _dst, int flags, int nonzero_rows)
 {
     int type = _src.type(), cn = CV_MAT_CN(type), depth = CV_MAT_DEPTH(type);
     Size ssize = _src.size();
     bool doubleSupport = ocl::Device::getDefault().doubleFPConfig() > 0;
 
-    if ( !((cn == 1 || cn == 2) && (depth == CV_32F || (depth == CV_64F && doubleSupport))) )
+    if (!(cn == 1 || cn == 2)
+        || !(depth == CV_32F || (depth == CV_64F && doubleSupport))
+        || ((flags & DFT_REAL_OUTPUT) && (flags & DFT_COMPLEX_OUTPUT)))
         return false;
 
     // if is not a multiplication of prime numbers { 2, 3, 5 }
@@ -2149,34 +2174,14 @@ static bool ocl_dft(InputArray _src, OutputArray _dst, int flags, int nonzero_ro
         return false;
 
     UMat src = _src.getUMat();
-    int complex_input = cn == 2 ? 1 : 0;
-    int complex_output = (flags & DFT_COMPLEX_OUTPUT) != 0;
-    int real_input = cn == 1 ? 1 : 0;
-    int real_output = (flags & DFT_REAL_OUTPUT) != 0;
     bool inv = (flags & DFT_INVERSE) != 0 ? 1 : 0;
 
     if( nonzero_rows <= 0 || nonzero_rows > _src.rows() )
         nonzero_rows = _src.rows();
     bool is1d = (flags & DFT_ROWS) != 0 || nonzero_rows == 1;
 
-    // if output format is not specified
-    if (complex_output + real_output == 0)
-    {
-        if (real_input)
-            real_output = 1;
-        else
-            complex_output = 1;
-    }
-
-    FftType fftType = (FftType)(complex_input << 0 | complex_output << 1);
-
-    // Forward Complex to CCS not supported
-    if (fftType == C2R && !inv)
-        fftType = C2C;
-
-    // Inverse CCS to Complex not supported
-    if (fftType == R2C && inv)
-        fftType = R2R;
+    FftType fftType = determineFFTType(cn == 1, cn == 2,
+        (flags & DFT_REAL_OUTPUT) != 0, (flags & DFT_COMPLEX_OUTPUT) != 0, inv);
 
     UMat output;
     if (fftType == C2C || fftType == R2C)
@@ -2200,51 +2205,38 @@ static bool ocl_dft(InputArray _src, OutputArray _dst, int flags, int nonzero_ro
         }
     }
 
+    bool result = false;
     if (!inv)
     {
-        if (!ocl_dft_rows(src, output, nonzero_rows, flags, fftType))
-            return false;
-
+        int nonzero_cols = fftType == R2R ? output.cols/2 + 1 : output.cols;
+        result = ocl_dft_rows(src, output, nonzero_rows, flags, fftType);
         if (!is1d)
-        {
-            int nonzero_cols = fftType == R2R ? output.cols/2 + 1 : output.cols;
-            if (!ocl_dft_cols(output, _dst, nonzero_cols, flags, fftType))
-                return false;
-        }
+            result = result && ocl_dft_cols(output, _dst, nonzero_cols, flags, fftType);
     }
     else
     {
         if (fftType == C2C)
         {
             // complex output
-            if (!ocl_dft_rows(src, output, nonzero_rows, flags, fftType))
-                return false;
-
+            result = ocl_dft_rows(src, output, nonzero_rows, flags, fftType);
             if (!is1d)
-            {
-                if (!ocl_dft_cols(output, output, output.cols, flags, fftType))
-                    return false;
-            }
+                result = result && ocl_dft_cols(output, output, output.cols, flags, fftType);
         }
         else
         {
             if (is1d)
             {
-                if (!ocl_dft_rows(src, output, nonzero_rows, flags, fftType))
-                    return false;
+                result = ocl_dft_rows(src, output, nonzero_rows, flags, fftType);
             }
             else
             {
                 int nonzero_cols = src.cols/2 + 1;
-                if (!ocl_dft_cols(src, output, nonzero_cols, flags, fftType))
-                    return false;
-
-                if (!ocl_dft_rows(output, _dst, nonzero_rows, flags, fftType))
-                    return false;
+                result = ocl_dft_cols(src, output, nonzero_cols, flags, fftType);
+                result = result && ocl_dft_rows(output, _dst, nonzero_rows, flags, fftType);
             }
         }
     }
-    return true;
+    return result;
 }
 
 } // namespace cv;
@@ -3342,6 +3334,9 @@ void cv::dft( InputArray _src0, OutputArray _dst, int flags, int nonzero_rows )
 
     CV_Assert( type == CV_32FC1 || type == CV_32FC2 || type == CV_64FC1 || type == CV_64FC2 );
 
+    // Fail if DFT_COMPLEX_INPUT is specified, but src is not 2 channels.
+    CV_Assert( !((flags & DFT_COMPLEX_INPUT) && src.channels() != 2) );
+
     if( !inv && src.channels() == 1 && (flags & DFT_COMPLEX_OUTPUT) )
         _dst.create( src.size(), CV_MAKETYPE(depth, 2) );
     else if( inv && src.channels() == 2 && (flags & DFT_REAL_OUTPUT) )
@@ -3849,20 +3844,20 @@ public:
             return;
         }
 
-        pDCTSpec = (Ipp8u*)ippMalloc(specSize);
+        pDCTSpec = (Ipp8u*)CV_IPP_MALLOC(specSize);
         if(!pDCTSpec && specSize)
         {
             *ok = false;
             return;
         }
 
-        pBuffer  = (Ipp8u*)ippMalloc(bufferSize);
+        pBuffer  = (Ipp8u*)CV_IPP_MALLOC(bufferSize);
         if(!pBuffer && bufferSize)
         {
             *ok = false;
             IPP_RETURN
         }
-        pInitBuf = (Ipp8u*)ippMalloc(initSize);
+        pInitBuf = (Ipp8u*)CV_IPP_MALLOC(initSize);
         if(!pInitBuf && initSize)
         {
             *ok = false;
@@ -3978,17 +3973,17 @@ static bool ippi_DCT_32f(const uchar * src, size_t src_step, uchar * dst, size_t
         if(ippDctGetSize(srcRoiSize, &specSize, &initSize, &bufferSize) < 0)
             return false;
 
-        pDCTSpec = (Ipp8u*)ippMalloc(specSize);
+        pDCTSpec = (Ipp8u*)CV_IPP_MALLOC(specSize);
         if(!pDCTSpec && specSize)
             return false;
 
-        pBuffer  = (Ipp8u*)ippMalloc(bufferSize);
+        pBuffer  = (Ipp8u*)CV_IPP_MALLOC(bufferSize);
         if(!pBuffer && bufferSize)
         {
             IPP_RELEASE
             return false;
         }
-        pInitBuf = (Ipp8u*)ippMalloc(initSize);
+        pInitBuf = (Ipp8u*)CV_IPP_MALLOC(initSize);
         if(!pInitBuf && initSize)
         {
             IPP_RELEASE

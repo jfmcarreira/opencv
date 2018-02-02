@@ -193,7 +193,7 @@ public:
         CV_Assert( nmixtures <= 255);
 
 #ifdef HAVE_OPENCL
-        if (ocl::useOpenCL() && opencl_ON)
+        if (ocl::isOpenCLActivated() && opencl_ON)
         {
             create_ocl_apply_kernel();
 
@@ -386,7 +386,7 @@ protected:
     // Tau - shadow threshold. The shadow is detected if the pixel is darker
     //version of the background. Tau is a threshold on how much darker the shadow can be.
     //Tau= 0.5 means that if pixel is more than 2 times darker then it is not shadow
-    //See: Prati,Mikic,Trivedi,Cucchiarra,"Detecting Moving Shadows...",IEEE PAMI,2003.
+    //See: Prati,Mikic,Trivedi,Cucchiara,"Detecting Moving Shadows...",IEEE PAMI,2003.
 
     String name_;
 
@@ -461,7 +461,7 @@ struct GaussBGStatModel2Params
     // Tau - shadow threshold. The shadow is detected if the pixel is darker
     //version of the background. Tau is a threshold on how much darker the shadow can be.
     //Tau= 0.5 means that if pixel is more than 2 times darker then it is not shadow
-    //See: Prati,Mikic,Trivedi,Cucchiarra,"Detecting Moving Shadows...",IEEE PAMI,2003.
+    //See: Prati,Mikic,Trivedi,Cucchiara,"Detecting Moving Shadows...",IEEE PAMI,2003.
 };
 
 struct GMM
@@ -472,7 +472,7 @@ struct GMM
 
 // shadow detection performed per pixel
 // should work for rgb data, could be usefull for gray scale and depth data as well
-// See: Prati,Mikic,Trivedi,Cucchiarra,"Detecting Moving Shadows...",IEEE PAMI,2003.
+// See: Prati,Mikic,Trivedi,Cucchiara,"Detecting Moving Shadows...",IEEE PAMI,2003.
 CV_INLINE bool
 detectShadowGMM(const float* data, int nchannels, int nmodes,
                 const GMM* gmm, const float* mean,
@@ -693,11 +693,16 @@ public:
                 //go through all modes
                 //////
 
-                //renormalize weights
-                totalWeight = 1.f/totalWeight;
+                // Renormalize weights. In the special case that the pixel does
+                // not agree with any modes, set weights to zero (a new mode will be added below).
+                float invWeight = 0.f;
+                if (std::abs(totalWeight) > FLT_EPSILON) {
+                    invWeight = 1.f/totalWeight;
+                }
+
                 for( int mode = 0; mode < nmodes; mode++ )
                 {
-                    gmm[mode].weight *= totalWeight;
+                    gmm[mode].weight *= invWeight;
                 }
 
                 //make new mode if needed and exit
@@ -765,6 +770,11 @@ public:
 
 bool BackgroundSubtractorMOG2Impl::ocl_apply(InputArray _image, OutputArray _fgmask, double learningRate)
 {
+    bool needToInitialize = nframes == 0 || learningRate >= 1 || _image.size() != frameSize || _image.type() != frameType;
+
+    if( needToInitialize )
+        initialize(_image.size(), _image.type());
+
     ++nframes;
     learningRate = learningRate >= 0 && nframes > 1 ? learningRate : 1./std::min( 2*nframes, history );
     CV_Assert(learningRate >= 0);
@@ -836,20 +846,20 @@ void BackgroundSubtractorMOG2Impl::apply(InputArray _image, OutputArray _fgmask,
 {
     CV_INSTRUMENT_REGION()
 
+#ifdef HAVE_OPENCL
+    if (opencl_ON)
+    {
+        CV_OCL_RUN(_fgmask.isUMat(), ocl_apply(_image, _fgmask, learningRate))
+
+        opencl_ON = false;
+        nframes = 0;
+    }
+#endif
+
     bool needToInitialize = nframes == 0 || learningRate >= 1 || _image.size() != frameSize || _image.type() != frameType;
 
     if( needToInitialize )
         initialize(_image.size(), _image.type());
-
-#ifdef HAVE_OPENCL
-    if (opencl_ON)
-    {
-        CV_OCL_RUN(_image.isUMat(), ocl_apply(_image, _fgmask, learningRate))
-
-        opencl_ON = false;
-        initialize(_image.size(), _image.type());
-    }
-#endif
 
     Mat image = _image.getMat();
     _fgmask.create( image.size(), CV_8U );
@@ -900,7 +910,10 @@ void BackgroundSubtractorMOG2Impl::getBackgroundImage_intern(OutputArray backgro
                 if(totalWeight > backgroundRatio)
                     break;
             }
-            float invWeight = 1.f/totalWeight;
+            float invWeight = 0.f;
+            if (std::abs(totalWeight) > FLT_EPSILON) {
+                invWeight = 1.f/totalWeight;
+            }
 
             meanBackground.at<Vec<T,CN> >(row, col) = Vec<T,CN>(meanVal * invWeight);
             meanVal = 0.f;
