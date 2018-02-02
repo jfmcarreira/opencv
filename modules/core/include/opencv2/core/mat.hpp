@@ -53,6 +53,10 @@
 
 #include "opencv2/core/bufferpool.hpp"
 
+#ifdef CV_CXX11
+#include <type_traits>
+#endif
+
 namespace cv
 {
 
@@ -61,6 +65,8 @@ namespace cv
 
 enum { ACCESS_READ=1<<24, ACCESS_WRITE=1<<25,
     ACCESS_RW=3<<24, ACCESS_MASK=ACCESS_RW, ACCESS_FAST=1<<26 };
+
+CV__DEBUG_NS_BEGIN
 
 class CV_EXPORTS _OutputArray;
 
@@ -351,6 +357,9 @@ public:
 
     void assign(const UMat& u) const;
     void assign(const Mat& m) const;
+
+    void assign(const std::vector<UMat>& v) const;
+    void assign(const std::vector<Mat>& v) const;
 };
 
 
@@ -399,6 +408,8 @@ public:
 #endif
 
 };
+
+CV__DEBUG_NS_END
 
 typedef const _InputArray& InputArray;
 typedef InputArray InputArrayOfArrays;
@@ -574,7 +585,7 @@ protected:
 An example demonstrating the serial out capabilities of cv::Mat
 */
 
- /** @brief n-dimensional dense array class
+ /** @brief n-dimensional dense array class \anchor CVMat_Details
 
 The class Mat represents an n-dimensional dense numerical single-channel or multi-channel array. It
 can be used to store real or complex-valued vectors and matrices, grayscale or color images, voxel
@@ -981,6 +992,13 @@ public:
     */
     template<typename _Tp> explicit Mat(const std::vector<_Tp>& vec, bool copyData=false);
 
+#ifdef CV_CXX11
+    /** @overload
+    */
+    template<typename _Tp, typename = typename std::enable_if<std::is_arithmetic<_Tp>::value>::type>
+    explicit Mat(const std::initializer_list<_Tp> list);
+#endif
+
 #ifdef CV_CXX_STD_ARRAY
     /** @overload
     */
@@ -1177,8 +1195,8 @@ public:
     /** @overload
     @param m Destination matrix. If it does not have a proper size or type before the operation, it is
     reallocated.
-    @param mask Operation mask. Its non-zero elements indicate which matrix elements need to be copied.
-    The mask has to be of type CV_8U and can have 1 or multiple channels.
+    @param mask Operation mask of the same size as \*this. Its non-zero elements indicate which matrix
+    elements need to be copied. The mask has to be of type CV_8U and can have 1 or multiple channels.
     */
     void copyTo( OutputArray m, InputArray mask ) const;
 
@@ -1214,7 +1232,8 @@ public:
 
     This is an advanced variant of the Mat::operator=(const Scalar& s) operator.
     @param value Assigned scalar converted to the actual array type.
-    @param mask Operation mask of the same size as \*this.
+    @param mask Operation mask of the same size as \*this. Its non-zero elements indicate which matrix
+    elements need to be copied. The mask has to be of type CV_8U and can have 1 or multiple channels
      */
     Mat& setTo(InputArray value, InputArray mask=noArray());
 
@@ -1462,7 +1481,7 @@ public:
      */
     void release();
 
-    //! deallocates the matrix data
+    //! internal use function, consider to use 'release' method instead; deallocates the matrix data
     void deallocate();
     //! internal use function; properly re-allocates _size, _step arrays
     void copySize(const Mat& m);
@@ -1515,6 +1534,11 @@ public:
     @param elem Added element(s).
     */
     template<typename _Tp> void push_back(const Mat_<_Tp>& elem);
+
+    /** @overload
+    @param elem Added element(s).
+    */
+    template<typename _Tp> void push_back(const std::vector<_Tp>& elem);
 
     /** @overload
     @param m Added line(s).
@@ -1646,7 +1670,7 @@ public:
                         inv_scale = 1.f/alpha_scale;
 
             CV_Assert( src1.type() == src2.type() &&
-                       src1.type() == CV_MAKETYPE(DataType<T>::depth, 4) &&
+                       src1.type() == CV_MAKETYPE(traits::Depth<T>::value, 4) &&
                        src1.size() == src2.size());
             Size size = src1.size();
             dst.create(size, src1.type());
@@ -1926,7 +1950,7 @@ public:
                         inv_scale = 1.f/alpha_scale;
 
             CV_Assert( src1.type() == src2.type() &&
-                       src1.type() == DataType<VT>::type &&
+                       src1.type() == traits::Type<VT>::value &&
                        src1.size() == src2.size());
             Size size = src1.size();
             dst.create(size, src1.type());
@@ -2170,6 +2194,10 @@ public:
     explicit Mat_(const Point3_<typename DataType<_Tp>::channel_type>& pt, bool copyData=true);
     explicit Mat_(const MatCommaInitializer_<_Tp>& commaInitializer);
 
+#ifdef CV_CXX11
+    Mat_(std::initializer_list<_Tp> values);
+#endif
+
 #ifdef CV_CXX_STD_ARRAY
     template <std::size_t _Nm> explicit Mat_(const std::array<_Tp, _Nm>& arr, bool copyData=false);
 #endif
@@ -2393,7 +2421,7 @@ public:
     void copyTo( OutputArray m ) const;
     //! copies those matrix elements to "m" that are marked with non-zero mask elements.
     void copyTo( OutputArray m, InputArray mask ) const;
-    //! converts matrix to another datatype with optional scalng. See cvConvertScale.
+    //! converts matrix to another datatype with optional scaling. See cvConvertScale.
     void convertTo( OutputArray m, int rtype, double alpha=1, double beta=0 ) const;
 
     void assignTo( UMat& m, int type=-1 ) const;
@@ -2969,9 +2997,7 @@ public:
     typedef const uchar** pointer;
     typedef uchar* reference;
 
-#ifndef OPENCV_NOSTL
     typedef std::random_access_iterator_tag iterator_category;
-#endif
 
     //! default constructor
     MatConstIterator();
@@ -3036,9 +3062,7 @@ public:
     typedef const _Tp* pointer;
     typedef const _Tp& reference;
 
-#ifndef OPENCV_NOSTL
     typedef std::random_access_iterator_tag iterator_category;
-#endif
 
     //! default constructor
     MatConstIterator_();
@@ -3089,9 +3113,7 @@ public:
     typedef _Tp* pointer;
     typedef _Tp& reference;
 
-#ifndef OPENCV_NOSTL
     typedef std::random_access_iterator_tag iterator_category;
-#endif
 
     //! the default constructor
     MatIterator_();
@@ -3225,9 +3247,7 @@ template<typename _Tp> class SparseMatConstIterator_ : public SparseMatConstIter
 {
 public:
 
-#ifndef OPENCV_NOSTL
     typedef std::forward_iterator_tag iterator_category;
-#endif
 
     //! the default constructor
     SparseMatConstIterator_();
@@ -3261,9 +3281,7 @@ template<typename _Tp> class SparseMatIterator_ : public SparseMatConstIterator_
 {
 public:
 
-#ifndef OPENCV_NOSTL
     typedef std::forward_iterator_tag iterator_category;
-#endif
 
     //! the default constructor
     SparseMatIterator_();

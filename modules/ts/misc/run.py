@@ -37,7 +37,7 @@ if __name__ == "__main__":
 
     # Valgrind
     parser.add_argument("--valgrind", action="store_true", default=False, help="Run C++ tests in valgrind")
-    parser.add_argument("--valgrind_supp", metavar="FILE", help="Path to valgrind suppression file (example: --valgrind_supp opencv/platforms/scripts/valgrind.supp)")
+    parser.add_argument("--valgrind_supp", metavar="FILE", action='append', help="Path to valgrind suppression file (example: --valgrind_supp opencv/platforms/scripts/valgrind.supp)")
     parser.add_argument("--valgrind_opt", metavar="OPT", action="append", default=[], help="Add command line option to valgrind (example: --valgrind_opt=--leak-check=full)")
 
     # Android
@@ -91,6 +91,9 @@ if __name__ == "__main__":
             test_args.extend(["--perf_force_samples=1"])
         if not [a for a in test_args if a.startswith("--perf_verify_sanity")] :
             test_args.extend(["--perf_verify_sanity"])
+
+    if bool(os.environ.get('BUILD_PRECOMMIT', None)):
+        test_args.extend(["--skip_unstable=1"])
 
     ret = 0
     logs = []
